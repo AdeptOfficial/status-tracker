@@ -11,14 +11,74 @@ Development log for the status-tracker project. New entries at the top.
 | Priority | Task | Issue/Notes |
 |----------|------|-------------|
 | 1 | **Test anime TV shows** | Flow may differ from movies. Sonarr handles shows differently. See `issues/design-separate-anime-movie-show-flows.md` |
-| 2 | **Media sync button** | Bulk populate database with existing media IDs from Jellyfin/Radarr/Sonarr. Users need to sync existing library. |
-| 3 | **Fix delete integration** | Multiple gaps in deletion sync. See `issues/deletion-integration-gaps.md` |
+| 2 | **Fix delete integration** | Multiple gaps in deletion sync. See `issues/deletion-integration-gaps.md` |
 
 **Current working state (2026-01-21):**
 - ✅ Anime movies: Full flow working (REQUESTED → AVAILABLE)
 - ✅ Jellyfin fallback checker: Polls every 30s for stuck requests
+- ✅ Library sync: Two-phase sync (add new + update existing metadata)
 - ❌ Anime TV shows: TESTED - stuck at IMPORTING (needs fallback checker)
 - ⚠️ Deletion sync: Has known bugs
+
+---
+
+## 2026-01-21: Library Sync - Update Existing Metadata (Phase 2)
+
+### Summary
+
+Enhanced library sync to update existing entries with missing correlation IDs. Previously, sync only added new items and skipped existing entries even when they had NULL `jellyfin_id`, `radarr_id`, or `sonarr_id`.
+
+### What Changed
+
+**New two-phase sync:**
+1. **Phase 1:** Add new items from Jellyfin (existing behavior)
+2. **Phase 2:** Update existing entries with missing metadata
+
+**Fields updated (only if NULL):**
+- `jellyfin_id` - Match by TMDB (movies), TVDB (TV), or AniDB (Shoko anime)
+- `radarr_id` - Match by TMDB ID
+- `sonarr_id` - Match by TVDB ID
+- `poster_url` - From Jellyfin item
+- `year` - From Jellyfin item
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `app/services/library_sync.py` | Added `_update_missing_metadata()` method, updated `sync_available_content()` to call Phase 2 |
+| `app/schemas.py` | Added `updated` field to `SyncResultResponse` |
+| `app/routers/api.py` | Return `updated` count in response |
+
+### Test Results
+
+Ran sync on dev server with 11 entries that had missing IDs:
+
+| Before | After | Count |
+|--------|-------|-------|
+| Movies missing radarr_id | All filled | 2 |
+| Movies missing jellyfin_id | All filled | 3 |
+| TV shows missing sonarr_id | All filled | 3 |
+| TV show (Link Click) missing jellyfin_id | Filled via AniDB | 1 |
+
+**API Response:**
+```json
+{
+  "total_scanned": 11,
+  "added": 0,
+  "updated": 10,
+  "skipped": 11,
+  "errors": 0
+}
+```
+
+### Known Limitation
+
+Anime managed by Shoko without TMDB/TVDB in Jellyfin may create duplicates in Phase 1. The Jellyfin item only has AniDB ID, which isn't checked during the "add new items" phase. These can be cleaned up manually or avoided by ensuring anime has TMDB/TVDB metadata in Jellyfin.
+
+### Related
+
+- `issues/library-sync-update-existing-metadata.md` - Original feature request (can be marked resolved)
+- `issues/status-tracker-bulk-media-sync.md` - Phase 1 documentation
 
 ---
 
