@@ -13,8 +13,35 @@ Request → Indexed → Downloading → Importing → [Anime Matching] → Avail
 ## Documentation
 
 - **Feature plans:** `features/`
+- **Known issues:** `issues/`
 - **Technical docs:** `docs/`
 - **Development log:** `DIARY.md`
+
+## Current Status (2026-01-21)
+
+### What Works
+| Flow | Status | Notes |
+|------|--------|-------|
+| Regular Movies | ✅ Working | Full flow through Radarr |
+| Regular TV Shows | ✅ Working | Full flow through Sonarr |
+| Anime Movies | ✅ Working | Via Jellyfin fallback checker (polls every 30s) |
+| Anime TV Shows | ❌ Broken | Stuck at IMPORTING - needs fallback checker extension |
+| Deletion Sync | ⚠️ Partial | Works but has gaps (see Known Issues) |
+| Library Sync | ⚠️ Partial | Adds new items but doesn't update missing IDs |
+
+### Known Issues (26 tracked)
+
+**High Priority:**
+- Anime TV shows stuck at IMPORTING state (`issues/design-separate-anime-movie-show-flows.md`)
+- Library sync doesn't populate missing service IDs (`issues/library-sync-missing-ids.md`)
+- Deletion sync has gaps with Shoko/Jellyseerr (`issues/deletion-integration-gaps.md`)
+
+**Medium Priority:**
+- Detail page SSE not updating download progress (`issues/detail-page-live-updates-bug.md`)
+- Missing poster on detail page (`issues/detail-page-missing-poster.md`)
+- Per-episode tracking not implemented (`issues/per-episode-download-tracking.md`)
+
+See `issues/` folder for full list.
 
 ## Project Structure
 
@@ -32,14 +59,17 @@ app/
 │   └── broadcaster.py   # SSE broadcasting
 ├── clients/
 │   ├── qbittorrent.py   # qBittorrent API client
-│   ├── jellyfin.py      # Jellyfin API (auth, deletion)
+│   ├── jellyfin.py      # Jellyfin API (auth, deletion, verification)
 │   ├── sonarr.py        # Sonarr API (deletion)
 │   ├── radarr.py        # Radarr API (deletion)
+│   ├── shoko.py         # Shoko SignalR client
 │   └── jellyseerr.py    # Jellyseerr API (deletion)
 ├── services/
 │   ├── auth.py          # Jellyfin token validation
 │   ├── deletion_orchestrator.py  # Deletion coordination
 │   ├── deletion_verifier.py      # Background verification
+│   ├── jellyfin_verifier.py      # Fallback checker for stuck requests
+│   ├── library_sync.py           # Sync existing Jellyfin library
 │   └── timeout_checker.py        # Stale request detection
 ├── plugins/
 │   ├── __init__.py      # Auto-loader
@@ -74,8 +104,8 @@ app/
 | 2 | Sonarr/Radarr Plugins | ✅ Complete |
 | 3 | qBittorrent Plugin | ✅ Complete |
 | 4 | Web Dashboard (htmx + Tailwind) | ✅ Complete |
-| 5 | Real-Time Updates (SSE) | ✅ Complete |
-| 6 | Shoko Plugin (SignalR) | ✅ Complete |
+| 5 | Real-Time Updates (SSE) | ⚠️ Partial (detail page bug) |
+| 6 | Shoko Plugin (SignalR) | ⚠️ Partial (movies only) |
 | 7 | Jellyfin Plugin | ✅ Complete |
 | 8 | Polish & Error Handling | ⏳ In Progress |
 
@@ -89,10 +119,15 @@ app/
 | 5 | Delete API Endpoints | ✅ Complete |
 | 6 | Dashboard Delete Button | ✅ Complete |
 | 7 | History Bulk Delete | ✅ Complete |
-| 8 | External Deletion Webhooks | ✅ Code Ready |
+| 8 | External Deletion Webhooks | ⚠️ Has gaps |
 | 9 | Deletion Logs Page | ✅ Complete |
 
-**Current:** Testing deletion sync (see `DIARY.md` for details)
+### Library Sync Feature
+| Part | Description | Status |
+|------|-------------|--------|
+| 1 | Add new items from Jellyfin | ✅ Complete |
+| 2 | Update existing items with missing IDs | ❌ Not implemented |
+| 3 | Cross-reference with Radarr/Sonarr/Shoko | ❌ Not implemented |
 
 ## Local Development
 
