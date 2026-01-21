@@ -48,6 +48,7 @@ Enhanced library sync to update existing entries with missing correlation IDs. P
 | `app/services/library_sync.py` | Added `_update_missing_metadata()` method, updated `sync_available_content()` to call Phase 2 |
 | `app/schemas.py` | Added `updated` field to `SyncResultResponse` |
 | `app/routers/api.py` | Return `updated` count in response |
+| `app/templates/history.html` | Added "Updated (filled missing IDs)" row to sync modal |
 
 ### Test Results
 

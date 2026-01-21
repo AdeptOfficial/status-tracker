@@ -227,6 +227,10 @@
                         <span class="text-green-300">Added</span>
                         <span id="sync-added" class="font-bold text-green-400">0</span>
                     </div>
+                    <div class="flex justify-between items-center p-3 bg-blue-900/30 rounded-lg">
+                        <span class="text-blue-300">Updated (filled missing IDs)</span>
+                        <span id="sync-updated" class="font-bold text-blue-400">0</span>
+                    </div>
                     <div class="flex justify-between items-center p-3 bg-gray-900 rounded-lg">
                         <span class="text-gray-300">Skipped (already tracked)</span>
                         <span id="sync-skipped" class="font-bold text-gray-400">0</span>
@@ -522,6 +526,7 @@
                 // Update results
                 document.getElementById('sync-total').textContent = result.total_scanned;
                 document.getElementById('sync-added').textContent = result.added;
+                document.getElementById('sync-updated').textContent = result.updated || 0;
                 document.getElementById('sync-skipped').textContent = result.skipped;
 
                 if (result.errors > 0) {
