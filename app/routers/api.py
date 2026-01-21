@@ -566,6 +566,7 @@ async def sync_library(
     return SyncResultResponse(
         total_scanned=result.total_scanned,
         added=result.added,
+        updated=result.updated,
         skipped=result.skipped,
         errors=result.errors,
         error_details=result.error_details,

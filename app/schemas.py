@@ -265,6 +265,7 @@ class SyncResultResponse(BaseModel):
 
     total_scanned: int
     added: int
+    updated: int = 0  # Existing entries with missing metadata filled in
     skipped: int
     errors: int
     error_details: list[str] = []
