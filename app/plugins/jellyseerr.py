@@ -1,0 +1,224 @@
+"""Jellyseerr plugin - handles media request webhooks.
+
+Jellyseerr is the entry point for most requests. It sends webhooks for:
+- Request created (PENDING/REQUESTED)
+- Request approved (APPROVED)
+- Request available (already in library)
+- Request failed
+
+Webhook setup in Jellyseerr:
+  Settings -> Notifications -> Webhook
+  URL: http://status-tracker:8000/hooks/jellyseerr
+  Enable: Request Pending, Request Approved, Media Available, Media Failed
+"""
+
+import logging
+from typing import TYPE_CHECKING, Optional
+
+from app.core.plugin_base import ServicePlugin
+from app.core.correlator import correlator
+from app.core.state_machine import state_machine
+from app.models import MediaRequest, MediaType, RequestState
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
+
+
+class JellyseerrPlugin(ServicePlugin):
+    """Handles Jellyseerr webhook events."""
+
+    @property
+    def name(self) -> str:
+        return "jellyseerr"
+
+    @property
+    def display_name(self) -> str:
+        return "Jellyseerr"
+
+    @property
+    def states_provided(self) -> list[RequestState]:
+        return [RequestState.REQUESTED, RequestState.APPROVED, RequestState.FAILED]
+
+    @property
+    def correlation_fields(self) -> list[str]:
+        return ["jellyseerr_id", "tmdb_id", "tvdb_id"]
+
+    async def handle_webhook(
+        self, payload: dict, db: "AsyncSession"
+    ) -> Optional[MediaRequest]:
+        """
+        Process Jellyseerr webhook.
+
+        Payload structure (Jellyseerr notification webhook):
+        {
+            "notification_type": "MEDIA_PENDING" | "MEDIA_APPROVED" | etc,
+            "subject": "Movie/Show Title",
+            "message": "Description",
+            "media": {
+                "media_type": "movie" | "tv",
+                "tmdbId": 12345,
+                "tvdbId": 67890,  # For TV
+                "status": "PENDING" | "APPROVED" | etc,
+                "externalUrl": "https://www.themoviedb.org/...",
+            },
+            "request": {
+                "request_id": 1,
+                "requestedBy_username": "user",
+                ...
+            },
+            "extra": [...]  # Additional info
+        }
+        """
+        notification_type = payload.get("notification_type", "")
+        media = payload.get("media", {})
+        request_info = payload.get("request", {})
+
+        logger.info(f"Jellyseerr webhook: {notification_type}")
+
+        # Handle test notification early - acknowledge without creating data
+        if notification_type == "TEST_NOTIFICATION":
+            logger.info("Jellyseerr test notification received - connection verified")
+            return None
+
+        # Extract IDs
+        jellyseerr_id = request_info.get("request_id")
+        tmdb_id = media.get("tmdbId")
+        tvdb_id = media.get("tvdbId")
+
+        # Try to find existing request
+        request = await correlator.find_by_any(
+            db,
+            jellyseerr_id=jellyseerr_id,
+            tmdb_id=tmdb_id,
+            tvdb_id=tvdb_id,
+        )
+
+        if notification_type == "MEDIA_PENDING":
+            # New request - create if doesn't exist
+            if not request:
+                request = await self._create_request(payload, db)
+            return request
+
+        if notification_type == "MEDIA_AUTO_APPROVED":
+            # Auto-approved request - create and immediately mark as approved
+            if not request:
+                request = await self._create_request(payload, db, auto_approved=True)
+            return request
+
+        if notification_type == "MEDIA_APPROVED":
+            if request:
+                await state_machine.transition(
+                    request,
+                    RequestState.APPROVED,
+                    db,
+                    service=self.name,
+                    event_type="Approved",
+                    details=f"Approved by {request_info.get('requestedBy_username', 'unknown')}",
+                    raw_data=payload,
+                )
+            return request
+
+        if notification_type == "MEDIA_AVAILABLE":
+            # This means it was already in the library (no download needed)
+            if request:
+                await state_machine.transition(
+                    request,
+                    RequestState.AVAILABLE,
+                    db,
+                    service=self.name,
+                    event_type="Already Available",
+                    details="Media was already in library",
+                    raw_data=payload,
+                )
+            return request
+
+        if notification_type == "MEDIA_FAILED":
+            if request:
+                await state_machine.transition(
+                    request,
+                    RequestState.FAILED,
+                    db,
+                    service=self.name,
+                    event_type="Failed",
+                    details=payload.get("message", "Request failed"),
+                    raw_data=payload,
+                )
+            return request
+
+        # Unknown notification type
+        logger.debug(f"Unhandled Jellyseerr notification: {notification_type}")
+        return None
+
+    async def _create_request(
+        self, payload: dict, db: "AsyncSession", auto_approved: bool = False
+    ) -> MediaRequest:
+        """Create a new MediaRequest from Jellyseerr webhook."""
+        media = payload.get("media", {})
+        request_info = payload.get("request", {})
+
+        # Determine media type
+        media_type_str = media.get("media_type", "movie")
+        media_type = MediaType.TV if media_type_str == "tv" else MediaType.MOVIE
+
+        # Extract poster URL from extra data if available
+        poster_url = None
+        extra = payload.get("extra", [])
+        for item in extra:
+            if item.get("name") == "Poster 500x750":
+                poster_url = item.get("value")
+                break
+
+        # Set initial state based on auto-approval
+        initial_state = RequestState.APPROVED if auto_approved else RequestState.REQUESTED
+
+        # Create the request
+        request = MediaRequest(
+            title=payload.get("subject", "Unknown Title"),
+            media_type=media_type,
+            state=initial_state,
+            jellyseerr_id=request_info.get("request_id"),
+            tmdb_id=media.get("tmdbId"),
+            tvdb_id=media.get("tvdbId"),
+            requested_by=request_info.get("requestedBy_username"),
+            poster_url=poster_url,
+        )
+
+        db.add(request)
+        await db.flush()  # Get the ID
+
+        # Add initial timeline event
+        event_type = "Auto-Approved" if auto_approved else "Requested"
+        details = f"Requested by {request.requested_by or 'unknown'}"
+        if auto_approved:
+            details += " (auto-approved)"
+
+        await state_machine.add_event(
+            request,
+            db,
+            service=self.name,
+            event_type=event_type,
+            details=details,
+            raw_data=payload,
+        )
+
+        logger.info(f"Created new request: {request.title} (ID: {request.id}, auto_approved={auto_approved})")
+        return request
+
+    def get_timeline_details(self, event_data: dict) -> str:
+        """Format event for timeline display."""
+        notification_type = event_data.get("notification_type", "")
+        request_info = event_data.get("request", {})
+        username = request_info.get("requestedBy_username", "")
+
+        if notification_type == "MEDIA_PENDING":
+            return f"Requested by {username}" if username else "New request"
+        if notification_type == "MEDIA_APPROVED":
+            return f"Approved by {username}" if username else "Request approved"
+        if notification_type == "MEDIA_AVAILABLE":
+            return "Already available in library"
+        if notification_type == "MEDIA_FAILED":
+            return event_data.get("message", "Request failed")
+
+        return ""

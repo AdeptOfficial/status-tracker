@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Active Requests - Status Tracker{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header with stats -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-700 pb-4">
+        <div>
+            <h1 class="text-2xl font-bold">Active Requests</h1>
+            <p class="text-gray-400">{{ requests|length }} request{% if requests|length != 1 %}s{% endif %} in progress</p>
+        </div>
+
+        <!-- Connection status indicator -->
+        <div class="flex items-center space-x-2">
+            <span class="text-sm text-gray-400" id="update-status">Connecting...</span>
+            <div id="connection-dot" class="w-2 h-2 bg-yellow-500 rounded-full"></div>
+        </div>
+    </div>
+
+    <!-- Request cards (this container refreshes on SSE updates) -->
+    <div id="request-list"
+         hx-get="/"
+         hx-trigger="sse:refresh"
+         hx-select="#request-list"
+         hx-swap="outerHTML"
+         class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {% if requests %}
+            {% for request in requests %}
+                {% include "components/card.html" %}
+            {% endfor %}
+        {% else %}
+            <div class="col-span-full text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <h3 class="mt-2 text-lg font-medium text-gray-300">No active requests</h3>
+                <p class="mt-1 text-gray-500">Ready for requests.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // SSE connection for real-time updates
+    // Why SSE? It's simpler than WebSocket for one-way server→client updates,
+    // has native browser auto-reconnect, and is perfect for status dashboards.
+
+    let eventSource = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 3000;
+
+    function updateConnectionStatus(connected, message) {
+        const dot = document.getElementById('connection-dot');
+        const status = document.getElementById('update-status');
+
+        if (connected) {
+            dot.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse';
+            status.textContent = message || 'Live updates active';
+            status.className = 'text-sm text-green-400';
+        } else {
+            dot.className = 'w-2 h-2 bg-red-500 rounded-full';
+            status.textContent = message || 'Disconnected';
+            status.className = 'text-sm text-red-400';
+        }
+    }
+
+    function connectSSE() {
+        if (eventSource) {
+            eventSource.close();
+        }
+
+        updateConnectionStatus(false, 'Connecting...');
+        eventSource = new EventSource('/api/sse');
+
+        eventSource.onopen = function() {
+            console.log('SSE connected');
+            reconnectAttempts = 0;
+            // Don't update status here - wait for 'connected' event
+        };
+
+        // Handle the initial connected event
+        eventSource.addEventListener('connected', function(e) {
+            console.log('SSE connected event received');
+            updateConnectionStatus(true, 'Live updates active');
+        });
+
+        // Handle update events (state changes, progress updates)
+        eventSource.addEventListener('update', function(e) {
+            console.log('SSE update received:', e.data);
+
+            // Parse the update to show what changed
+            try {
+                const data = JSON.parse(e.data);
+                const title = data.request?.title || 'Request';
+                const state = data.request?.state || '';
+
+                // Brief visual feedback
+                updateConnectionStatus(true, `Updated: ${title}`);
+
+                // Reset status text after 2 seconds
+                setTimeout(() => {
+                    updateConnectionStatus(true, 'Live updates active');
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to parse SSE data:', err);
+            }
+
+            // Trigger htmx to refresh the list
+            // This fires the 'sse:refresh' custom event that htmx is listening for
+            htmx.trigger('#request-list', 'sse:refresh');
+        });
+
+        eventSource.onerror = function(e) {
+            console.error('SSE error:', e);
+            updateConnectionStatus(false, 'Connection lost');
+            eventSource.close();
+
+            // Attempt to reconnect with exponential backoff
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                const delay = reconnectDelay * reconnectAttempts;
+                updateConnectionStatus(false, `Reconnecting in ${delay/1000}s...`);
+                setTimeout(connectSSE, delay);
+            } else {
+                updateConnectionStatus(false, 'Connection failed - refresh page');
+            }
+        };
+    }
+
+    // Connect on page load
+    connectSSE();
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        if (eventSource) {
+            eventSource.close();
+        }
+    });
+</script>
+{% endblock %}

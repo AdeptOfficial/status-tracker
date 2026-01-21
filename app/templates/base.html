@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Status Tracker{% endblock %}</title>
+
+    <!-- Tailwind CSS (CDN for simplicity - no build step needed) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- htmx for partial page updates -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- htmx SSE extension (for Part 5) -->
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
+
+    <style>
+        /* Custom animations */
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .animate-pulse-slow {
+            animation: pulse-slow 2s ease-in-out infinite;
+        }
+
+        /* Progress bar animation */
+        .progress-bar {
+            transition: width 0.3s ease-in-out;
+        }
+    </style>
+
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col">
+    <!-- Navigation -->
+    <nav class="bg-gray-800 border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="flex items-center space-x-2">
+                        <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4"/>
+                        </svg>
+                        <span class="font-bold text-xl">Status Tracker</span>
+                    </a>
+                </div>
+
+                <!-- Navigation links -->
+                <div class="flex items-center space-x-4">
+                    <a href="/"
+                       class="px-3 py-2 rounded-md text-sm font-medium
+                              {% if active_page == 'home' %}bg-gray-700 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %}">
+                        Active
+                    </a>
+                    <a href="/history"
+                       class="px-3 py-2 rounded-md text-sm font-medium
+                              {% if active_page == 'history' %}bg-gray-700 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %}">
+                        History
+                    </a>
+                    {% if is_admin %}
+                    <a href="/deletion-logs"
+                       class="px-3 py-2 rounded-md text-sm font-medium
+                              {% if active_page == 'deletion-logs' %}bg-red-700 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %}">
+                        Deletions
+                    </a>
+                    {% endif %}
+                    <a href="/status"
+                       class="px-3 py-2 rounded-md text-sm font-medium
+                              {% if active_page == 'status' %}bg-gray-700 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %}">
+                        Status
+                    </a>
+
+                    <!-- Separator -->
+                    <div class="h-6 w-px bg-gray-700"></div>
+
+                    <!-- User auth section -->
+                    {% if current_user %}
+                    <div class="flex items-center space-x-3">
+                        <span class="text-sm text-gray-400">
+                            {{ current_user.username }}
+                            {% if is_admin %}
+                            <span class="ml-1 px-1.5 py-0.5 text-xs bg-blue-900 text-blue-300 rounded">Admin</span>
+                            {% endif %}
+                        </span>
+                        <button onclick="logout()"
+                                class="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white">
+                            Logout
+                        </button>
+                    </div>
+                    {% else %}
+                    <a href="/login"
+                       class="px-3 py-2 rounded-md text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white">
+                        Login
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 border-t border-gray-700 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <p class="text-center text-gray-500 text-sm">
+                Status Tracker v0.1.0
+            </p>
+        </div>
+    </footer>
+
+    <!-- Global logout function -->
+    <script>
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                localStorage.removeItem('jellyfinToken');
+                window.location.href = '/login';
+            } catch (err) {
+                console.error('Logout error:', err);
+                // Clear local storage anyway
+                localStorage.removeItem('jellyfinToken');
+                window.location.href = '/login';
+            }
+        }
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+
+{% block title %}Deletion Logs - Status Tracker{% endblock %}
+
+{% set source_colors = {
+    'dashboard': 'bg-blue-500',
+    'sonarr': 'bg-orange-500',
+    'radarr': 'bg-yellow-500',
+    'jellyfin': 'bg-purple-500',
+    'shoko': 'bg-pink-500',
+    'external': 'bg-gray-500'
+} %}
+
+{% set status_colors = {
+    'pending': 'text-gray-400',
+    'acknowledged': 'text-yellow-400',
+    'confirmed': 'text-green-400',
+    'verified': 'text-green-500',
+    'failed': 'text-red-400',
+    'skipped': 'text-gray-500',
+    'not_needed': 'text-gray-500',
+    'not_applicable': 'text-gray-600'
+} %}
+
+{% set deletion_status_colors = {
+    'in_progress': 'text-yellow-400',
+    'complete': 'text-green-400',
+    'incomplete': 'text-red-400'
+} %}
+
+{% set deletion_status_labels = {
+    'in_progress': 'In Progress',
+    'complete': 'Complete',
+    'incomplete': 'Incomplete'
+} %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold">Deletion Logs</h1>
+            <p class="text-gray-400">{{ total }} deletion{% if total != 1 %}s{% endif %} recorded</p>
+        </div>
+    </div>
+
+    <!-- Source filter tabs -->
+    <div class="flex items-center gap-2 border-b border-gray-700 pb-2 flex-wrap">
+        <a href="/deletion-logs"
+           class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
+                  {% if not current_source_filter %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">
+            All ({{ total }})
+        </a>
+        <a href="/deletion-logs?source=dashboard"
+           class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
+                  {% if current_source_filter == 'dashboard' %}bg-blue-700 text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">
+            Dashboard ({{ source_stats.dashboard or 0 }})
+        </a>
+        <a href="/deletion-logs?source=sonarr"
+           class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
+                  {% if current_source_filter == 'sonarr' %}bg-orange-700 text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">
+            Sonarr ({{ source_stats.sonarr or 0 }})
+        </a>
+        <a href="/deletion-logs?source=radarr"
+           class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
+                  {% if current_source_filter == 'radarr' %}bg-yellow-700 text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">
+            Radarr ({{ source_stats.radarr or 0 }})
+        </a>
+    </div>
+
+    <!-- Deletion logs table -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <table class="w-full">
+            <thead class="bg-gray-900 text-gray-400 text-sm">
+                <tr>
+                    <th class="px-4 py-3 text-left">Title</th>
+                    <th class="px-4 py-3 text-left">Type</th>
+                    <th class="px-4 py-3 text-left">Source</th>
+                    <th class="px-4 py-3 text-left">Deleted By</th>
+                    <th class="px-4 py-3 text-left">Status</th>
+                    <th class="px-4 py-3 text-left">Date</th>
+                    <th class="px-4 py-3 text-left">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700">
+                {% if logs %}
+                    {% for log in logs %}
+                    <tr class="hover:bg-gray-700/50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-3">
+                                {% if log.poster_url %}
+                                <img src="{{ log.poster_url }}" alt="" class="w-10 h-14 object-cover rounded">
+                                {% else %}
+                                <div class="w-10 h-14 bg-gray-700 rounded flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4"/>
+                                    </svg>
+                                </div>
+                                {% endif %}
+                                <div>
+                                    <p class="font-medium text-white">{{ log.title }}</p>
+                                    {% if log.year %}
+                                    <p class="text-sm text-gray-400">{{ log.year }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs font-medium rounded
+                                         {% if log.media_type.value == 'movie' %}bg-blue-900/50 text-blue-300{% else %}bg-purple-900/50 text-purple-300{% endif %}">
+                                {{ log.media_type.value|upper }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded {{ source_colors.get(log.source.value, 'bg-gray-500') }} bg-opacity-20">
+                                {{ log.source.value|title }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-300">
+                            {{ log.deleted_by_username or 'System' }}
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="{{ deletion_status_colors.get(log.status.value, 'text-gray-400') }} text-sm
+                                         {% if log.status.value == 'in_progress' %}animate-pulse{% endif %}">
+                                {{ deletion_status_labels.get(log.status.value, log.status.value) }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-400 text-sm">
+                            {{ log.initiated_at.strftime('%Y-%m-%d %H:%M') }}
+                        </td>
+                        <td class="px-4 py-3">
+                            <button onclick="showLogDetail({{ log.id }})"
+                                    class="text-blue-400 hover:text-blue-300 text-sm">
+                                Details
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-12 text-center">
+                            <svg class="mx-auto h-12 w-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            <h3 class="mt-2 text-lg font-medium text-gray-300">No deletions yet</h3>
+                            <p class="mt-1 text-gray-500">Deleted media will appear here.</p>
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="flex justify-center gap-2">
+        {% if page > 1 %}
+        <a href="/deletion-logs?page={{ page - 1 }}{% if current_source_filter %}&source={{ current_source_filter }}{% endif %}"
+           class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
+            Previous
+        </a>
+        {% endif %}
+
+        <span class="px-4 py-2 text-gray-400">
+            Page {{ page }} of {{ total_pages }}
+        </span>
+
+        {% if page < total_pages %}
+        <a href="/deletion-logs?page={{ page + 1 }}{% if current_source_filter %}&source={{ current_source_filter }}{% endif %}"
+           class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
+            Next
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Log Detail Modal -->
+<div id="log-detail-modal" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 bg-black/70" onclick="hideLogDetail()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg border border-gray-700 max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div class="p-6 border-b border-gray-700">
+                <h3 class="text-xl font-bold text-white" id="log-detail-title">Loading...</h3>
+            </div>
+            <div id="log-detail-content" class="p-6 overflow-y-auto max-h-[60vh]">
+                <div class="flex justify-center py-8">
+                    <svg class="animate-spin h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-700 flex justify-end">
+                <button onclick="hideLogDetail()"
+                        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showLogDetail(logId) {
+        const modal = document.getElementById('log-detail-modal');
+        const title = document.getElementById('log-detail-title');
+        const content = document.getElementById('log-detail-content');
+
+        modal.classList.remove('hidden');
+        title.textContent = 'Loading...';
+        content.innerHTML = `
+            <div class="flex justify-center py-8">
+                <svg class="animate-spin h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+        `;
+
+        // Fetch log details
+        const token = localStorage.getItem('jellyfinToken') || '';
+        fetch(`/api/deletion-logs/${logId}`, {
+            headers: {
+                'X-Jellyfin-Token': token
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            title.textContent = data.title;
+            content.innerHTML = renderLogDetail(data);
+        })
+        .catch(err => {
+            content.innerHTML = `<p class="text-red-400">Error loading details: ${err.message}</p>`;
+        });
+    }
+
+    function hideLogDetail() {
+        document.getElementById('log-detail-modal').classList.add('hidden');
+    }
+
+    function renderLogDetail(log) {
+        const statusColors = {
+            'pending': 'text-gray-400',
+            'acknowledged': 'text-yellow-400',
+            'confirmed': 'text-green-400',
+            'verified': 'text-green-500',
+            'failed': 'text-red-400',
+            'skipped': 'text-gray-500',
+            'not_needed': 'text-gray-500',
+            'not_applicable': 'text-gray-600'
+        };
+
+        const statusIcons = {
+            'pending': '⏳',
+            'acknowledged': '📤',
+            'confirmed': '✓',
+            'verified': '✓✓',
+            'failed': '✗',
+            'skipped': '⊘',
+            'not_needed': '−',
+            'not_applicable': '—'
+        };
+
+        const deletionStatusColors = {
+            'in_progress': 'text-yellow-400',
+            'complete': 'text-green-400',
+            'incomplete': 'text-red-400'
+        };
+
+        const deletionStatusLabels = {
+            'in_progress': 'In Progress',
+            'complete': 'Complete',
+            'incomplete': 'Incomplete'
+        };
+
+        // Group events by service
+        const serviceEvents = {};
+        log.sync_events.forEach(event => {
+            if (!serviceEvents[event.service]) {
+                serviceEvents[event.service] = [];
+            }
+            serviceEvents[event.service].push(event);
+        });
+
+        let html = `
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-gray-400">Type:</span>
+                        <span class="ml-2 text-white">${log.media_type.toUpperCase()}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">Year:</span>
+                        <span class="ml-2 text-white">${log.year || 'N/A'}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">Source:</span>
+                        <span class="ml-2 text-white">${log.source}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">Deleted by:</span>
+                        <span class="ml-2 text-white">${log.deleted_by_username || 'System'}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">Initiated:</span>
+                        <span class="ml-2 text-white">${new Date(log.initiated_at).toLocaleString()}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">Status:</span>
+                        <span class="ml-2 ${deletionStatusColors[log.status] || 'text-gray-400'}">${deletionStatusLabels[log.status] || log.status}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">Completed:</span>
+                        <span class="ml-2 text-white">${log.completed_at ? new Date(log.completed_at).toLocaleString() : 'In progress'}</span>
+                    </div>
+                </div>
+
+                <div class="border-t border-gray-700 pt-4">
+                    <h4 class="text-lg font-semibold text-white mb-3">Sync Timeline</h4>
+        `;
+
+        // Display services in consistent order
+        const serviceOrder = ['sonarr', 'radarr', 'shoko', 'jellyfin', 'jellyseerr'];
+        const orderedServices = serviceOrder.filter(s => serviceEvents[s]);
+
+        for (const service of orderedServices) {
+            const events = serviceEvents[service];
+            const latestEvent = events[events.length - 1];
+            const statusClass = statusColors[latestEvent.status] || 'text-gray-400';
+            const statusIcon = statusIcons[latestEvent.status] || '?';
+
+            html += `
+                <div class="bg-gray-900 rounded-lg p-4 mb-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-medium text-white capitalize">${service}</span>
+                        <span class="${statusClass}">${statusIcon} ${latestEvent.status}</span>
+                    </div>
+                    <div class="space-y-1 text-sm">
+            `;
+
+            events.forEach(event => {
+                const time = new Date(event.timestamp).toLocaleTimeString();
+                html += `
+                    <div class="flex items-center gap-2 text-gray-400">
+                        <span class="text-xs">${time}</span>
+                        <span class="${statusColors[event.status] || 'text-gray-400'}">${event.status}</span>
+                        ${event.details ? `<span class="text-gray-500">- ${event.details}</span>` : ''}
+                    </div>
+                `;
+                if (event.error_message) {
+                    html += `<div class="text-red-400 text-xs ml-12">${event.error_message}</div>`;
+                }
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `
+                </div>
+            </div>
+        `;
+
+        return html;
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideLogDetail();
+        }
+    });
+</script>
+{% endblock %}

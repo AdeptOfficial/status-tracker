@@ -1,0 +1,67 @@
+# ==========================================================================
+# Monitor Stack - Status tracking and observability services
+# ==========================================================================
+# Services: status-tracker
+#
+# Network: Uses external "media-net" network shared with media stack
+#          This allows status-tracker to communicate with sonarr, radarr, etc.
+#
+# Prerequisites:
+#   1. Create external network: docker network create media-net
+#   2. Add networks section to media stack docker-compose.yml
+#   3. Restart media stack to join the network
+#
+# Related docs:
+#   - Feature request: ideas/features/request-status-dashboard.md
+# ==========================================================================
+
+services:
+  status-tracker:
+    container_name: status-tracker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - TZ=${TZ:-America/Chicago}
+      - DATABASE_URL=sqlite:////config/tracker.db
+      # qBittorrent accessed via Gluetun (shares network namespace)
+      - QBIT_HOST=gluetun
+      - QBIT_PORT=8080
+      - QBIT_USERNAME=${QBIT_USERNAME:-admin}
+      - QBIT_PASSWORD=${QBIT_PASSWORD}
+      # External URL for deep links (what users access)
+      - JELLYFIN_URL=${JELLYFIN_URL:-http://localhost:8096}
+      # Polling settings
+      - POLL_INTERVAL=${POLL_INTERVAL:-5}
+      # Shoko SignalR integration
+      - ENABLE_SHOKO=${ENABLE_SHOKO:-true}
+      - SHOKO_HOST=${SHOKO_HOST:-shoko}
+      - SHOKO_PORT=${SHOKO_PORT:-8111}
+      - SHOKO_API_KEY=${SHOKO_API_KEY:-}
+      # Timeout checker settings
+      - ENABLE_TIMEOUT_CHECKER=${ENABLE_TIMEOUT_CHECKER:-true}
+      - DOWNLOADING_TIMEOUT=${DOWNLOADING_TIMEOUT:-1440}
+      - IMPORTING_TIMEOUT=${IMPORTING_TIMEOUT:-60}
+      # Deletion sync settings (Part 2+)
+      # Host/port use defaults from config.py (container names on media-net)
+      - ENABLE_DELETION_SYNC=${ENABLE_DELETION_SYNC:-false}
+      - JELLYFIN_API_KEY=${JELLYFIN_API_KEY:-}
+      - SONARR_API_KEY=${SONARR_API_KEY:-}
+      - RADARR_API_KEY=${RADARR_API_KEY:-}
+      - JELLYSEERR_API_KEY=${JELLYSEERR_API_KEY:-}
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS:-}
+    volumes:
+      - /opt/appdata/status-tracker:/config
+    ports:
+      - 8100:8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  default:
+    name: media-net
+    external: true
