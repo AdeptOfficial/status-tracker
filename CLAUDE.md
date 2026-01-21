@@ -42,6 +42,7 @@ status-tracker/
 ├── Dockerfile
 ├── docs/                    # Technical documentation
 ├── issues/                  # Bug tracking
+│   └── resolved/            # Completed issues (move here when done)
 └── features/                # Feature planning
 ```
 
