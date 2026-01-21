@@ -1,0 +1,505 @@
+{% extends "base.html" %}
+
+{% block title %}{{ media_request.title }} - Status Tracker{% endblock %}
+
+{% set state_colors = {
+    'requested': 'bg-yellow-500',
+    'approved': 'bg-blue-500',
+    'indexed': 'bg-purple-500',
+    'downloading': 'bg-cyan-500',
+    'download_done': 'bg-teal-500',
+    'importing': 'bg-orange-500',
+    'anime_matching': 'bg-pink-500',
+    'available': 'bg-green-500',
+    'failed': 'bg-red-500',
+    'timeout': 'bg-gray-500'
+} %}
+
+{% set state_labels = {
+    'requested': 'Requested',
+    'approved': 'Approved',
+    'indexed': 'Found',
+    'downloading': 'Downloading',
+    'download_done': 'Downloaded',
+    'importing': 'Importing',
+    'anime_matching': 'Matching',
+    'available': 'Ready to Watch',
+    'failed': 'Failed',
+    'timeout': 'Timeout'
+} %}
+
+{% block content %}
+<div id="detail-content" class="space-y-6">
+    <!-- Back button and connection status -->
+    <div class="flex items-center justify-between">
+        <a href="/" class="inline-flex items-center text-gray-400 hover:text-white transition-colors">
+            <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            Back to requests
+        </a>
+
+        <!-- Connection status indicator -->
+        <div class="flex items-center space-x-2">
+            <span class="text-sm text-gray-400" id="update-status">Connecting...</span>
+            <div id="connection-dot" class="w-2 h-2 bg-yellow-500 rounded-full"></div>
+        </div>
+    </div>
+
+    <!-- Main content grid (refreshed via SSE) -->
+    <div id="detail-main"
+         hx-get="/request/{{ media_request.id }}"
+         hx-trigger="sse:refresh"
+         hx-select="#detail-main"
+         hx-swap="outerHTML"
+         class="grid gap-6 lg:grid-cols-3">
+
+        <!-- Left: Poster and info -->
+        <div class="lg:col-span-1">
+            <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                <!-- Poster -->
+                {% if media_request.poster_url %}
+                    <img src="{{ media_request.poster_url }}"
+                         alt="{{ media_request.title }}"
+                         class="w-full object-cover aspect-[2/3]">
+                {% else %}
+                    <div class="w-full bg-gray-700 flex items-center justify-center aspect-[2/3]">
+                        <svg class="w-16 h-16 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4"/>
+                        </svg>
+                    </div>
+                {% endif %}
+
+                <!-- Info -->
+                <div class="p-4 space-y-3">
+                    <h1 class="text-xl font-bold">{{ media_request.title }}</h1>
+
+                    <div class="flex items-center gap-2 text-sm text-gray-400">
+                        {% if media_request.year %}
+                            <span>{{ media_request.year }}</span>
+                        {% endif %}
+                        <span class="px-2 py-0.5 text-xs font-medium rounded
+                                     {% if media_request.media_type.value == 'movie' %}bg-blue-900/50 text-blue-300{% else %}bg-purple-900/50 text-purple-300{% endif %}">
+                            {{ media_request.media_type.value|upper }}
+                        </span>
+                    </div>
+
+                    {% if media_request.media_type.value == 'tv' and media_request.season %}
+                        <p class="text-sm text-gray-400">
+                            Season {{ media_request.season }}{% if media_request.episode %}, Episode {{ media_request.episode }}{% endif %}
+                        </p>
+                    {% endif %}
+
+                    <!-- Quality and indexer -->
+                    {% if media_request.quality %}
+                        <div class="pt-2 border-t border-gray-700">
+                            <p class="text-sm">
+                                <span class="text-gray-500">Quality:</span>
+                                <span class="text-white">{{ media_request.quality }}</span>
+                            </p>
+                            {% if media_request.indexer %}
+                                <p class="text-sm">
+                                    <span class="text-gray-500">From:</span>
+                                    <span class="text-white">{{ media_request.indexer }}</span>
+                                </p>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+
+                    <!-- Requested by -->
+                    {% if media_request.requested_by %}
+                        <div class="pt-2 border-t border-gray-700">
+                            <p class="text-sm">
+                                <span class="text-gray-500">Requested by:</span>
+                                <span class="text-white">{{ media_request.requested_by }}</span>
+                            </p>
+                        </div>
+                    {% endif %}
+
+                    <!-- Watch button (if available) -->
+                    {% if media_request.state.value == 'available' and media_request.jellyfin_id %}
+                        <a href="{{ jellyfin_url }}/web/index.html#!/details?id={{ media_request.jellyfin_id }}"
+                           target="_blank"
+                           class="block w-full mt-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-center font-medium rounded-lg transition-colors">
+                            Watch Now
+                        </a>
+                    {% endif %}
+
+                    <!-- Retry button (if failed or timed out) -->
+                    {% if media_request.state.value in ['failed', 'timeout'] %}
+                        <button hx-post="/api/requests/{{ media_request.id }}/retry"
+                                hx-swap="none"
+                                hx-on::after-request="if(event.detail.successful) { window.location.reload(); }"
+                                class="block w-full mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-center font-medium rounded-lg transition-colors">
+                            <svg class="inline-block w-4 h-4 mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            Retry Request
+                        </button>
+                    {% endif %}
+
+                    <!-- Delete button (admin only) -->
+                    {% if is_admin %}
+                        <button onclick="showDeleteModal()"
+                                class="block w-full mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-center font-medium rounded-lg transition-colors">
+                            <svg class="inline-block w-4 h-4 mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            Delete Media
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Progress and timeline -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Current status card -->
+            <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <h2 class="text-lg font-semibold mb-4">Current Status</h2>
+
+                <!-- Status badge -->
+                <div class="flex items-center gap-3">
+                    <span class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-full
+                                 {{ state_colors.get(media_request.state.value, 'bg-gray-500') }} bg-opacity-20
+                                 text-{{ state_colors.get(media_request.state.value, 'bg-gray-500').replace('bg-', '') }}-400">
+                        {{ state_labels.get(media_request.state.value, media_request.state.value) }}
+                    </span>
+
+                    {% if media_request.state.value in ['downloading', 'importing', 'anime_matching'] %}
+                        <span class="text-gray-400 text-sm animate-pulse">Processing...</span>
+                    {% endif %}
+                </div>
+
+                <!-- Download progress (if downloading) -->
+                {% if media_request.state.value == 'downloading' and media_request.download_progress is not none %}
+                    <div class="mt-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-2xl font-bold text-white">{{ (media_request.download_progress * 100)|round(1) }}%</span>
+                            <div class="text-right text-sm text-gray-400">
+                                {% if media_request.download_speed %}
+                                    <p>{{ media_request.download_speed }}</p>
+                                {% endif %}
+                                {% if media_request.download_eta %}
+                                    <p>ETA: {{ media_request.download_eta }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-3">
+                            <div class="progress-bar bg-cyan-500 h-3 rounded-full transition-all duration-300"
+                                 style="width: {{ (media_request.download_progress * 100)|round(1) }}%"></div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Timeline -->
+            <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <h2 class="text-lg font-semibold mb-6">Timeline</h2>
+
+                <div class="relative">
+                    <!-- Timeline line -->
+                    <div class="absolute left-3 top-2 bottom-2 w-0.5 bg-gray-700"></div>
+
+                    <!-- Timeline events -->
+                    <div class="space-y-6">
+                        {% for event in timeline_events %}
+                            <div class="relative flex gap-4">
+                                <!-- Dot -->
+                                <div class="relative z-10 flex-shrink-0 w-6 h-6 rounded-full
+                                            {{ state_colors.get(event.state.value, 'bg-gray-500') }}
+                                            flex items-center justify-center">
+                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                </div>
+
+                                <!-- Content -->
+                                <div class="flex-1 min-w-0 pb-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="font-medium text-white">
+                                            {{ state_labels.get(event.state.value, event.state.value) }}
+                                        </p>
+                                        <time class="text-sm text-gray-500 flex-shrink-0">
+                                            {{ event.timestamp.strftime('%I:%M %p') }}
+                                        </time>
+                                    </div>
+
+                                    {% if event.details %}
+                                        <p class="text-sm text-gray-400 mt-1">{{ event.details }}</p>
+                                    {% endif %}
+
+                                    <p class="text-xs text-gray-600 mt-1">
+                                        via {{ event.service }}
+                                    </p>
+                                </div>
+                            </div>
+                        {% else %}
+                            <p class="text-gray-500 text-center py-4">No events recorded yet</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal (admin only) -->
+{% if is_admin %}
+<div id="delete-modal" class="fixed inset-0 z-50 hidden">
+    <!-- Backdrop -->
+    <div class="fixed inset-0 bg-black/70" onclick="hideDeleteModal()"></div>
+
+    <!-- Modal content -->
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg border border-gray-700 max-w-md w-full p-6 relative">
+            <h3 class="text-xl font-bold text-white mb-4">Delete Media</h3>
+
+            <p class="text-gray-300 mb-4">
+                Are you sure you want to delete <span class="font-semibold text-white">{{ media_request.title }}</span>?
+            </p>
+
+            <div class="bg-gray-900 rounded-lg p-4 mb-4">
+                <p class="text-sm text-gray-400 mb-2">This will:</p>
+                <ul class="text-sm text-gray-300 space-y-1">
+                    <li class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Remove from status-tracker
+                    </li>
+                    {% if media_request.media_type.value == 'tv' %}
+                    <li class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Delete from Sonarr (and files from disk)
+                    </li>
+                    {% else %}
+                    <li class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Delete from Radarr (and files from disk)
+                    </li>
+                    {% endif %}
+                    <li class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Remove from Jellyfin library
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Clear from Jellyseerr
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Delete files checkbox -->
+            <div class="flex items-center mb-6">
+                <input type="checkbox" id="delete-files" checked
+                       class="w-4 h-4 text-red-600 bg-gray-700 border-gray-600 rounded focus:ring-red-500 focus:ring-2">
+                <label for="delete-files" class="ml-2 text-sm text-gray-300">
+                    Delete files from disk (uncheck to keep files)
+                </label>
+            </div>
+
+            {% if not deletion_sync_enabled %}
+            <div class="bg-yellow-900/50 border border-yellow-600/50 rounded-lg p-3 mb-4">
+                <p class="text-sm text-yellow-300">
+                    <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    Deletion sync is disabled. Only the status-tracker record will be removed.
+                </p>
+            </div>
+            {% endif %}
+
+            <div class="flex justify-end space-x-3">
+                <button onclick="hideDeleteModal()"
+                        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors">
+                    Cancel
+                </button>
+                <button onclick="confirmDelete()"
+                        id="delete-confirm-btn"
+                        class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors">
+                    Delete
+                </button>
+            </div>
+
+            <!-- Loading state -->
+            <div id="delete-loading" class="hidden absolute inset-0 bg-gray-800/90 flex items-center justify-center rounded-lg">
+                <div class="text-center">
+                    <svg class="animate-spin h-8 w-8 text-red-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p class="text-gray-300">Deleting...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // SSE connection for real-time updates on this specific request
+    const requestId = {{ media_request.id }};
+
+    let eventSource = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 3000;
+
+    function updateConnectionStatus(connected, message) {
+        const dot = document.getElementById('connection-dot');
+        const status = document.getElementById('update-status');
+
+        if (connected) {
+            dot.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse';
+            status.textContent = message || 'Live updates active';
+            status.className = 'text-sm text-green-400';
+        } else {
+            dot.className = 'w-2 h-2 bg-red-500 rounded-full';
+            status.textContent = message || 'Disconnected';
+            status.className = 'text-sm text-red-400';
+        }
+    }
+
+    function connectSSE() {
+        if (eventSource) {
+            eventSource.close();
+        }
+
+        updateConnectionStatus(false, 'Connecting...');
+        eventSource = new EventSource('/api/sse');
+
+        eventSource.onopen = function() {
+            console.log('SSE connected');
+            reconnectAttempts = 0;
+        };
+
+        eventSource.addEventListener('connected', function(e) {
+            console.log('SSE connected event received');
+            updateConnectionStatus(true, 'Live updates active');
+        });
+
+        // Handle update events - only refresh if this request was updated
+        eventSource.addEventListener('update', function(e) {
+            console.log('SSE update received:', e.data);
+
+            try {
+                const data = JSON.parse(e.data);
+
+                // Only refresh if this is our request
+                if (data.request_id === requestId) {
+                    console.log('Update for this request, refreshing...');
+                    updateConnectionStatus(true, 'Updating...');
+
+                    // Trigger htmx to refresh the detail content
+                    htmx.trigger('#detail-main', 'sse:refresh');
+
+                    setTimeout(() => {
+                        updateConnectionStatus(true, 'Live updates active');
+                    }, 1000);
+                }
+            } catch (err) {
+                console.error('Failed to parse SSE data:', err);
+            }
+        });
+
+        eventSource.onerror = function(e) {
+            console.error('SSE error:', e);
+            updateConnectionStatus(false, 'Connection lost');
+            eventSource.close();
+
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                const delay = reconnectDelay * reconnectAttempts;
+                updateConnectionStatus(false, `Reconnecting in ${delay/1000}s...`);
+                setTimeout(connectSSE, delay);
+            } else {
+                updateConnectionStatus(false, 'Connection failed - refresh page');
+            }
+        };
+    }
+
+    // Connect on page load
+    connectSSE();
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        if (eventSource) {
+            eventSource.close();
+        }
+    });
+
+    // Delete modal functions
+    function showDeleteModal() {
+        document.getElementById('delete-modal').classList.remove('hidden');
+    }
+
+    function hideDeleteModal() {
+        document.getElementById('delete-modal').classList.add('hidden');
+        document.getElementById('delete-loading').classList.add('hidden');
+    }
+
+    async function confirmDelete() {
+        const deleteFiles = document.getElementById('delete-files').checked;
+        const loading = document.getElementById('delete-loading');
+        const confirmBtn = document.getElementById('delete-confirm-btn');
+
+        // Show loading state
+        loading.classList.remove('hidden');
+        confirmBtn.disabled = true;
+
+        try {
+            // Get Jellyfin token from localStorage (if user logged in via Jellyfin)
+            const token = localStorage.getItem('jellyfinToken') || '';
+
+            const response = await fetch(`/api/requests/${requestId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Jellyfin-Token': token,
+                },
+                body: JSON.stringify({
+                    delete_files: deleteFiles
+                })
+            });
+
+            if (response.ok) {
+                // Success - redirect to history
+                window.location.href = '/history';
+            } else if (response.status === 401) {
+                alert('Authentication required. Please log in with your Jellyfin account.');
+                hideDeleteModal();
+            } else if (response.status === 403) {
+                alert('Admin privileges required to delete media.');
+                hideDeleteModal();
+            } else {
+                const error = await response.json();
+                alert(`Delete failed: ${error.detail || 'Unknown error'}`);
+                hideDeleteModal();
+            }
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert(`Delete failed: ${err.message}`);
+            hideDeleteModal();
+        }
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideDeleteModal();
+        }
+    });
+</script>
+{% endblock %}

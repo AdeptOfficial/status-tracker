@@ -1,0 +1,14 @@
+Quick capture file for issues/features when no assistant is available.
+
+How to use:
+- Add notes under "Issues:" or "Features:" sections
+- The assistant will automatically process these when starting a session
+- Processed items are removed after being converted to proper tracking
+
+
+----------------------------------------
+issues:
+
+-----------------------------------------
+features:
+

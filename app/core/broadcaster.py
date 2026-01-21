@@ -1,0 +1,110 @@
+"""SSE broadcasting for real-time updates.
+
+Manages connected clients and broadcasts request updates.
+Used in Part 5 for live dashboard updates without page refresh.
+"""
+
+import asyncio
+import json
+import logging
+from typing import TYPE_CHECKING, AsyncGenerator
+
+from app.schemas import MediaRequestResponse, SSEUpdate
+
+if TYPE_CHECKING:
+    from app.models import MediaRequest
+
+logger = logging.getLogger(__name__)
+
+
+class Broadcaster:
+    """
+    Manages SSE connections and broadcasts updates to all clients.
+
+    Usage:
+        # In SSE endpoint
+        async for data in broadcaster.subscribe():
+            yield data
+
+        # After state change
+        await broadcaster.broadcast_update(request)
+    """
+
+    def __init__(self):
+        self._clients: list[asyncio.Queue] = []
+
+    async def subscribe(self) -> AsyncGenerator[str, None]:
+        """
+        Subscribe to updates. Returns an async generator for SSE endpoint.
+
+        Yields SSE-formatted strings like:
+            event: update
+            data: {"event_type": "state_change", ...}
+        """
+        queue: asyncio.Queue = asyncio.Queue()
+        self._clients.append(queue)
+        logger.info(f"Client connected. Total clients: {len(self._clients)}")
+
+        try:
+            while True:
+                data = await queue.get()
+                yield data
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._clients.remove(queue)
+            logger.info(f"Client disconnected. Total clients: {len(self._clients)}")
+
+    async def broadcast(self, event_type: str, data: dict) -> None:
+        """
+        Broadcast an event to all connected clients.
+
+        Args:
+            event_type: SSE event name (e.g., 'update', 'progress')
+            data: Dictionary to JSON-serialize and send
+        """
+        if not self._clients:
+            return
+
+        message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+        # Send to all clients (non-blocking)
+        for queue in self._clients:
+            try:
+                queue.put_nowait(message)
+            except asyncio.QueueFull:
+                logger.warning("Client queue full, skipping message")
+
+    async def broadcast_update(
+        self,
+        request: "MediaRequest",
+        event_type: str = "state_change",
+    ) -> None:
+        """
+        Broadcast a request update to all connected clients.
+
+        Args:
+            request: The updated MediaRequest
+            event_type: Type of update (state_change, progress_update, new_request)
+        """
+        # Convert to response schema
+        request_data = MediaRequestResponse.model_validate(request).model_dump(
+            mode="json"
+        )
+
+        update = SSEUpdate(
+            event_type=event_type,
+            request_id=request.id,
+            request=request_data,
+        )
+
+        await self.broadcast("update", update.model_dump(mode="json"))
+
+    @property
+    def client_count(self) -> int:
+        """Number of connected clients."""
+        return len(self._clients)
+
+
+# Global instance
+broadcaster = Broadcaster()
