@@ -23,8 +23,8 @@ Episode Tracking:
 - Episode states are updated: GRABBING → DOWNLOADING → DOWNLOADED
 
 Adaptive Polling:
-- POLL_FAST (5s): When there are active downloads (GRABBING or DOWNLOADING)
-- POLL_SLOW (30s): When no active downloads (idle)
+- POLL_FAST (3s): When there are active downloads (GRABBING or DOWNLOADING)
+- POLL_SLOW (15s): When no active downloads (idle)
 """
 
 import logging
@@ -51,8 +51,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Adaptive polling intervals
-POLL_FAST = 5   # seconds when downloads active
-POLL_SLOW = 30  # seconds when idle
+POLL_FAST = 3   # seconds when downloads active (was 5s, reduced for responsiveness)
+POLL_SLOW = 15  # seconds when idle (was 30s, reduced for quicker detection)
 
 
 class QBittorrentPlugin(ServicePlugin):
@@ -90,7 +90,7 @@ class QBittorrentPlugin(ServicePlugin):
         Return polling interval based on active downloads.
 
         Checks database for requests in GRABBING or DOWNLOADING state.
-        Returns POLL_FAST (5s) if active downloads, POLL_SLOW (30s) if idle.
+        Returns POLL_FAST (3s) if active downloads, POLL_SLOW (15s) if idle.
         """
         active_count = await db.scalar(
             select(func.count()).select_from(MediaRequest).where(
