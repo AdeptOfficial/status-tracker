@@ -122,8 +122,8 @@ async def history(
         RequestState.TIMEOUT,
     ]
 
-    # Build base query
-    stmt = select(MediaRequest)
+    # Build base query with eager loading for episodes (used by card.html)
+    stmt = select(MediaRequest).options(selectinload(MediaRequest.episodes))
 
     # Apply state filter if provided (otherwise show all terminal states)
     if state_filter and state_filter in ['available', 'failed', 'timeout']:

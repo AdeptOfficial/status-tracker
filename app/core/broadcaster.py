@@ -16,6 +16,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Heartbeat interval to keep SSE connections alive (seconds)
+# Proxies/browsers may timeout idle connections - this prevents that
+SSE_HEARTBEAT_INTERVAL = 15
+
 
 class Broadcaster:
     """
@@ -40,6 +44,8 @@ class Broadcaster:
         Yields SSE-formatted strings like:
             event: update
             data: {"event_type": "state_change", ...}
+
+        Sends periodic heartbeat to keep connection alive (prevents proxy/browser timeouts).
         """
         queue: asyncio.Queue = asyncio.Queue()
         self._clients.append(queue)
@@ -47,8 +53,17 @@ class Broadcaster:
 
         try:
             while True:
-                data = await queue.get()
-                yield data
+                try:
+                    # Wait for message with timeout for heartbeat
+                    data = await asyncio.wait_for(
+                        queue.get(), timeout=SSE_HEARTBEAT_INTERVAL
+                    )
+                    yield data
+                except asyncio.TimeoutError:
+                    # No message received within timeout - send heartbeat to keep connection alive
+                    # SSE comment format (colon prefix) is ignored by clients but keeps connection open
+                    yield ": heartbeat\n\n"
+                    logger.debug("Sent SSE heartbeat")
         except asyncio.CancelledError:
             pass
         finally:

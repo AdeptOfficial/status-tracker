@@ -16,10 +16,13 @@ import logging
 import re
 from typing import TYPE_CHECKING, Optional
 
+from datetime import datetime
+
 from app.core.plugin_base import ServicePlugin
 from app.core.correlator import correlator
 from app.core.state_machine import state_machine
-from app.models import MediaRequest, MediaType, RequestState
+from app.models import MediaRequest, MediaType, RequestState, EpisodeState
+from app.clients.jellyfin import jellyfin_client
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -136,15 +139,39 @@ class JellyseerrPlugin(ServicePlugin):
             return request
 
         if notification_type == "MEDIA_AVAILABLE":
-            # This means it was already in the library (no download needed)
+            # Jellyseerr detected media is available in Jellyfin
             if request:
+                # Mark all episodes as available (for TV shows)
+                for episode in request.episodes:
+                    episode.state = EpisodeState.AVAILABLE
+
+                # Try to find Jellyfin item ID for Watch button
+                jellyfin_item = None
+                item_type = "Series" if request.media_type == MediaType.TV else "Movie"
+
+                if request.tvdb_id:
+                    jellyfin_item = await jellyfin_client.find_item_by_tvdb(
+                        request.tvdb_id, item_type
+                    )
+                if not jellyfin_item and request.tmdb_id:
+                    jellyfin_item = await jellyfin_client.find_item_by_tmdb(
+                        request.tmdb_id, item_type
+                    )
+
+                if jellyfin_item:
+                    request.jellyfin_id = jellyfin_item.get("Id")
+                    request.available_at = datetime.utcnow()
+                    logger.info(
+                        f"Found Jellyfin ID {request.jellyfin_id} for {request.title}"
+                    )
+
                 await state_machine.transition(
                     request,
                     RequestState.AVAILABLE,
                     db,
                     service=self.name,
-                    event_type="Already Available",
-                    details="Media was already in library",
+                    event_type="Available",
+                    details="Media available in library",
                     raw_data=payload,
                 )
             return request

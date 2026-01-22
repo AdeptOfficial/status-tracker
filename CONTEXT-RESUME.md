@@ -1,6 +1,6 @@
 # Status Tracker - Context Resume Prompt
 
-**Last Updated:** 2026-01-22 (UI Fixes + SSE Bug Session)
+**Last Updated:** 2026-01-22 (Bug Fixes Session)
 **Branch:** `feature/per-episode-tracking`
 
 ---
@@ -11,7 +11,7 @@
 
 I'm continuing work on the **status-tracker** app. Read these files for context:
 
-1. `/home/adept/git/status-tracker-workflow-fix/docs/flows/SESSION-HANDOFF-2026-01-22-UI-FIXES.md`
+1. `/home/adept/git/status-tracker-workflow-fix/docs/flows/SESSION-HANDOFF-2026-01-22-FIXES.md`
 2. `/home/adept/git/status-tracker-workflow-fix/DIARY.md`
 3. `/home/adept/git/status-tracker-workflow-fix/issues/ui-episode-progress-improvements.md`
 
@@ -23,46 +23,55 @@ I'm continuing work on the **status-tracker** app. Read these files for context:
 
 ## Current State Summary
 
-### Completed ✅
+### Completed This Session ✅
 
-1. **Per-Episode Tracking UI** - Implemented and deployed
-   - Episode progress bar + expandable list on cards
-   - Detail page shows full episode breakdown
-   - All 4 test shows working (Lycoris, SNAFU, movies)
+1. **SSE Heartbeat Fix** - 15s keepalive prevents connection drops
+   - File: `app/core/broadcaster.py`
+   - Issue: `issues/sse-connections-dropping.md`
 
-2. **VFS Reliability Fix** - Deployed
-   - Increased VFS_REGENERATION_DELAY from 3s to 10s
-   - Commit: `dec409a`
+2. **"Grabbed" Label Fix** - Timeline shows past tense
+   - Files: `app/templates/detail.html`, `card.html`
 
-3. **Lycoris Recoil Fixed** - Now AVAILABLE with all 13 episodes
-   - Fix: Triggered library refresh via API
-   - VFS regenerated, fallback checker found it
+3. **History Page 500 Fix** - Added selectinload for episodes
+   - File: `app/routers/pages.py`
+   - Issue: `issues/history-page-500-error.md`
 
-4. **Bocchi the Rock Test** - In progress (12 eps downloading)
-   - State: DOWNLOADING
-   - Quality: Bluray-1080p Remux (~63 GB)
+4. **Jellyseerr MEDIA_AVAILABLE Fix** - Now marks episodes + sets jellyfin_id
+   - File: `app/plugins/jellyseerr.py`
+   - Issue: `issues/jellyseerr-media-available-incomplete.md`
 
-### Critical Bugs ❌
+5. **Jellyfin Plugin Fix** - ItemAdded now marks episodes AVAILABLE
+   - File: `app/plugins/jellyfin.py`
 
-1. **SSE Connections Dropping** (HIGH PRIORITY)
-   - Connections disconnect after 1-2 seconds
-   - UI shows stale data (0% when actual is 31%)
-   - Logs show rapid connect/disconnect pattern
-   - Files: `app/routers/sse.py`, `app/core/broadcaster.py`
+6. **Bocchi the Rock Test** - Full flow completed
+   - 12 episodes, 63GB Remux, VFS auto-regenerated
+   - Data manually fixed (episodes + jellyfin_id)
 
-2. **IMPORTING State Skipped for Anime**
-   - Goes DOWNLOADED → ANIME_MATCHING, skipping IMPORTING
+### All Paths to AVAILABLE Now Set Required Fields
+
+| Path | jellyfin_id | Episodes | Status |
+|------|-------------|----------|--------|
+| Fallback checker | ✅ | ✅ | Was working |
+| Jellyseerr webhook | ✅ | ✅ | Fixed this session |
+| Jellyfin webhook | ✅ | ✅ | Fixed this session |
+| Library sync | ✅ | N/A | Was working |
+
+### Bugs Still Open ❌
+
+1. **IMPORTING State Skipped** - Anime goes DOWNLOADED → ANIME_MATCHING
    - Issue: `docs/issues/2026-01-22-importing-state-skipped-for-anime.md`
 
-### UI Improvements Requested
+2. **Episode Progress Display** - Shows "x ready" not "x downloaded, y ready"
+   - Issue: `issues/ui-episode-progress-improvements.md`
 
-**Issue:** `issues/ui-episode-progress-improvements.md`
+### UI Improvements Requested (Not Done Yet)
 
-1. Timeline: "grabbing" → "Grabbed" (past tense)
-2. Episode Progress: Show "x downloaded, y ready" (not just ready)
-3. Remove "Matching" label → show "Downloaded" for anime
-4. Per-episode download % when downloading
-5. New SEARCHING state for Sonarr indexer searches
+From `issues/ui-episode-progress-improvements.md`:
+1. ~~Timeline: "grabbing" → "Grabbed"~~ ✅ DONE
+2. Episode Progress: "x downloaded, y ready" (not just "x ready")
+3. Per-episode download %
+4. Remove "Matching" label for anime TV
+5. New SEARCHING state
 
 ---
 
@@ -76,20 +85,19 @@ Jellyseerr → Radarr/Sonarr → qBittorrent → Shoko (anime) → Jellyfin
 ### States
 ```
 REQUESTED → APPROVED → GRABBING → DOWNLOADING → DOWNLOADED → IMPORTING → AVAILABLE
-                                                      ↓ (anime)
-                                               ANIME_MATCHING
-                                                      ↓
-                                                 AVAILABLE
+                                                     ↓ (anime)
+                                              ANIME_MATCHING
+                                                     ↓
+                                                AVAILABLE
 ```
 
 ### Key Files
 | Purpose | File |
 |---------|------|
-| SSE endpoint | `app/routers/sse.py` |
-| Broadcaster | `app/core/broadcaster.py` |
-| State machine | `app/core/state_machine.py` |
+| SSE heartbeat | `app/core/broadcaster.py` (SSE_HEARTBEAT_INTERVAL=15) |
 | Fallback checker | `app/services/jellyfin_verifier.py` |
-| qBit polling | `app/plugins/qbittorrent.py` (POLL_FAST=3, POLL_SLOW=15) |
+| Jellyseerr plugin | `app/plugins/jellyseerr.py` |
+| Jellyfin plugin | `app/plugins/jellyfin.py` |
 | Card template | `app/templates/components/card.html` |
 | Detail template | `app/templates/detail.html` |
 
@@ -130,36 +138,12 @@ ssh root@10.0.2.10 "pct exec 220 -- docker logs status-tracker --tail 50"
 
 | ID | Title | State | Episodes |
 |----|-------|-------|----------|
-| 7 | BOCCHI THE ROCK! | downloading | 12 (all downloading) |
+| 7 | BOCCHI THE ROCK! | available | 12/12 ready ✅ (fixed) |
 | 6 | Lycoris Recoil | available | 13/13 ready |
 | 5 | Rascal Dreams... | available | Movie |
 | 4 | Your Name. | available | Movie |
-| 2 | SNAFU | available | TV |
+| 2 | SNAFU | available | 13/13 ready |
 | 3 | Akira | available | Movie |
-
----
-
-## SSE Bug Investigation Notes
-
-**Symptom:** SSE clients disconnect after 1-2 seconds
-
-**Logs show:**
-```
-04:29:57 - Client connected (1 client)
-04:29:58 - Client disconnected (0 clients)  # 1 second!
-04:29:58 - Client connected (1 client)
-04:30:00 - Client disconnected (0 clients)  # 2 seconds!
-```
-
-**Database has correct data:**
-- Progress: 31%
-- Speed: 55.9 MB/s
-- Polling IS working
-
-**Possible causes:**
-- Browser/proxy timeout
-- Missing keepalive pings in SSE
-- Error in event generator
 
 ---
 
@@ -167,10 +151,10 @@ ssh root@10.0.2.10 "pct exec 220 -- docker logs status-tracker --tail 50"
 
 | Priority | Task |
 |----------|------|
-| 1 | Fix SSE disconnection bug |
-| 2 | Implement UI improvements |
-| 3 | Fix IMPORTING state skipped |
-| 4 | Monitor Bocchi → AVAILABLE |
+| 1 | Test SSE heartbeat stability (should stay connected >15s now) |
+| 2 | Implement remaining UI improvements |
+| 3 | Fix IMPORTING state skipped for anime |
+| 4 | Commit all changes to git |
 
 ---
 
