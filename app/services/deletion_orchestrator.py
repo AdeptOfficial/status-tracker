@@ -32,6 +32,7 @@ from app.clients.sonarr import sonarr_client
 from app.clients.radarr import radarr_client
 from app.clients.jellyfin import jellyfin_client
 from app.clients.jellyseerr import jellyseerr_client
+from app.clients.qbittorrent import QBittorrentClient
 from app.core.broadcaster import broadcaster
 from app.config import settings
 
@@ -288,6 +289,12 @@ class DeletionOrchestrator:
         is_movie = request.media_type == MediaType.MOVIE
 
         services = {
+            # qBittorrent - applicable if we have a torrent hash
+            "qbittorrent": {
+                "applicable": request.qbit_hash is not None,
+                "has_id": request.qbit_hash is not None,
+                "skip": "qbittorrent" in skip_services,
+            },
             # Sonarr only for TV shows
             "sonarr": {
                 "applicable": is_tv,
