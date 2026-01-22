@@ -1,63 +1,78 @@
-# Session Handoff: Anime TV Shows Fix
+# Session Handoff: Status-Tracker Architecture Redesign
 
 **Date:** 2026-01-21
 **Branch:** `fix/media-workflow-audit` in `~/git/status-tracker-workflow-fix/`
 
 ## Current Task
 
-Fixing anime TV shows stuck at IMPORTING/ANIME_MATCHING state.
+Redesigning status-tracker architecture to fix fundamental flow issues. User wants to dive deep into **Request Addition** flow.
 
-## What Was Done
+## Key Documents Created
 
-1. **Cloned repo** to `~/git/status-tracker-workflow-fix/` (separate from main repo where another agent is working)
-2. **Created branch** `fix/media-workflow-audit`
-3. **Completed audit** of all 4 media paths - documented in `docs/media-workflow-audit.md`
-4. **Verified services** - VPN working, Radarr/Sonarr can reach qBittorrent
+1. `~/git/status-tracker-workflow-fix/docs/media-workflow-audit.md` - Bug findings from testing
+2. `~/git/status-tracker-workflow-fix/docs/flow-redesign-plan.md` - Flow divergence analysis
+3. `~/git/status-tracker-workflow-fix/docs/architecture-v2.md` - **MAIN DOC** - Full architecture
 
-## Root Cause Found
+## Bugs Found During Testing
 
-In `app/services/jellyfin_verifier.py:170-174`:
+| # | Bug | Impact |
+|---|-----|--------|
+| 1 | Correlation matches wrong request | Webhooks update old AVAILABLE request instead of new one |
+| 2 | TV fallback missing | `media_type == "movie"` filter + no TVDB lookup |
+| 3 | Anime ID mismatch | Shoko uses AniDB, we search by TMDB |
+| 4 | Poster URL missing | Not fetched from TMDB |
+| 5 | Library sync phantom requests | Creates requests user didn't make |
+
+## Architecture Overview (4 Paths)
+
+```
+COMMON:  Jellyseerr → APPROVED → Grab → INDEXED → DOWNLOADING → IMPORTING
+                                                                    │
+         ┌──────────────────┬──────────────────┬────────────────────┤
+         ▼                  ▼                  ▼                    ▼
+    Regular Movie      Regular TV        Anime Movie           Anime TV
+    (TMDB lookup)     (TVDB lookup)    (TMDB + Shoko)       (TVDB + Shoko)
+```
+
+## Request Addition Phases (from architecture-v2.md)
+
+1. **Request Creation** - Jellyseerr webhook → create request
+2. **Indexer Grab** - Radarr/Sonarr Grab → store download_id (qbit hash)
+3. **Download Progress** - qBit polling → update progress
+4. **Import** - Radarr/Sonarr Import → store final_path, DIVERGE here
+5. **Verification** - Different per path (TMDB/TVDB/Shoko lookup)
+
+## Key Correlation Fix Needed
+
 ```python
-stmt = select(MediaRequest).where(
-    MediaRequest.state.in_([RequestState.ANIME_MATCHING, RequestState.IMPORTING]),
-    MediaRequest.media_type == "movie",  # <-- BUG: TV shows excluded!
-    MediaRequest.tmdb_id.isnot(None),
+# CURRENT (broken): Finds ANY request, even AVAILABLE ones
+request = await correlator.find_by_any(db, tmdb_id=tmdb_id)
+
+# PROPOSED: Prioritize by download_id, exclude completed requests
+request = await correlator.find_active_by_any(
+    db,
+    download_id=download_id,  # PRIMARY - unique per download
+    tmdb_id=tmdb_id,
+    exclude_states=[RequestState.AVAILABLE, RequestState.DELETED],
+    order_by="created_at DESC",
 )
 ```
 
-The fallback checker ONLY checks movies. Anime TV shows are filtered out.
+## Security Protocols
 
-Additionally, there's no `find_item_by_tvdb()` method in `app/clients/jellyfin.py` - only `find_item_by_tmdb()`.
-
-## Required Fixes
-
-### Fix 1: `app/services/jellyfin_verifier.py`
-- Include TV shows in the fallback check
-- Use TVDB ID for TV shows instead of TMDB ID
-
-### Fix 2: `app/clients/jellyfin.py`
-- Add `find_item_by_tvdb()` method (copy pattern from `find_item_by_tmdb()`)
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `app/services/jellyfin_verifier.py` | Remove movie-only filter, add TV show logic |
-| `app/clients/jellyfin.py` | Add `find_item_by_tvdb()` method |
+- Never read `.env`, `config.xml`, `settings.json` without explicit request
+- Never run `printenv`, `env`, `docker inspect`, `docker-compose config`
+- SSH access: `ssh root@10.0.2.10` then `pct enter 220` for media LXC
 
 ## Next Step
 
-User was about to request an anime TV show to live-test the issue before implementing the fix.
+User wants to **dive deep into Request Addition** - hammer out the exact steps for all 4 paths, especially:
+- What data comes from each webhook
+- What correlation keys to use at each step
+- How to handle edge cases
 
-## Service Status (verified)
+## Files to Read
 
-- VPN: ✅ Connected (IP: 216.246.31.26)
-- Radarr → qBittorrent: ✅ Working
-- Sonarr → qBittorrent: ✅ Working
-- All containers: ✅ Healthy (except byparr DNS issue - unrelated)
-
-## Key Context Files
-
-- Audit doc: `~/git/status-tracker-workflow-fix/docs/media-workflow-audit.md`
-- Fallback checker: `~/git/status-tracker-workflow-fix/app/services/jellyfin_verifier.py`
-- Jellyfin client: `~/git/status-tracker-workflow-fix/app/clients/jellyfin.py`
+1. `~/git/status-tracker-workflow-fix/docs/architecture-v2.md` - Full architecture
+2. `~/git/status-tracker-workflow-fix/app/core/correlator.py` - Current correlator code
+3. `~/git/status-tracker-workflow-fix/app/plugins/` - Webhook handlers

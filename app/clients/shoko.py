@@ -12,6 +12,9 @@ Connection states:
 - CONNECTING: Connection in progress
 - CONNECTED: Connected and receiving events
 - RECONNECTING: Lost connection, attempting to reconnect
+
+HTTP API:
+- POST /api/v3/Action/RemoveMissingFiles/{removeFromMyList} - Remove entries for missing files
 """
 
 import asyncio
@@ -20,6 +23,7 @@ import logging
 from dataclasses import dataclass
 from typing import Callable, Awaitable, Optional
 
+import httpx
 from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
 
@@ -307,3 +311,112 @@ def get_shoko_client() -> ShokoClient:
     if _shoko_client is None:
         _shoko_client = ShokoClient()
     return _shoko_client
+
+
+class ShokoHTTPClient:
+    """
+    HTTP client for Shoko Server actions.
+
+    Used for triggering server-side operations like removing entries
+    for files that no longer exist on disk.
+    """
+
+    def __init__(
+        self,
+        host: str = settings.SHOKO_HOST,
+        port: int = settings.SHOKO_PORT,
+        api_key: str = settings.SHOKO_API_KEY,
+    ):
+        self.host = host
+        self.port = port
+        self.api_key = api_key
+        self._client: Optional[httpx.AsyncClient] = None
+
+    @property
+    def base_url(self) -> str:
+        """Base URL for Shoko API."""
+        return f"http://{self.host}:{self.port}"
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create async HTTP client."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=60.0,  # Longer timeout - scan can take time
+                headers={
+                    "apikey": self.api_key,
+                    "Content-Type": "application/json",
+                }
+            )
+        return self._client
+
+    async def close(self):
+        """Close the HTTP client."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
+
+    async def remove_missing_files(self, remove_from_mylist: bool = True) -> tuple[bool, str]:
+        """
+        Trigger Shoko to remove entries for files that no longer exist on disk.
+
+        This is a global operation that scans all managed folders and removes
+        database entries where the underlying file is missing. Useful after
+        Sonarr/Radarr deletes files.
+
+        Args:
+            remove_from_mylist: If True, also remove from AniDB MyList
+
+        Returns:
+            Tuple of (success, message)
+        """
+        if not self.api_key:
+            return False, "Shoko API key not configured"
+
+        try:
+            client = await self._get_client()
+            # Shoko v3 API: GET /api/v3/Action/RemoveMissingFiles/{removeFromMyList}
+            response = await client.get(
+                f"/api/v3/Action/RemoveMissingFiles/{str(remove_from_mylist).lower()}"
+            )
+
+            if response.status_code in (200, 204):
+                logger.info("Triggered Shoko RemoveMissingFiles scan")
+                return True, "RemoveMissingFiles scan triggered"
+            else:
+                error_msg = f"RemoveMissingFiles failed with status {response.status_code}"
+                try:
+                    error_data = response.json()
+                    if "message" in error_data:
+                        error_msg = error_data["message"]
+                    elif "Message" in error_data:
+                        error_msg = error_data["Message"]
+                except Exception:
+                    pass
+                logger.error(f"Shoko RemoveMissingFiles failed: {error_msg}")
+                return False, error_msg
+
+        except httpx.RequestError as e:
+            error_msg = f"Network error: {e}"
+            logger.error(f"Request error calling Shoko RemoveMissingFiles: {e}")
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Unexpected error: {e}"
+            logger.error(f"Unexpected error calling Shoko RemoveMissingFiles: {e}")
+            return False, error_msg
+
+    async def health_check(self) -> bool:
+        """Check if Shoko Server is reachable."""
+        if not self.api_key:
+            return False
+        try:
+            client = await self._get_client()
+            response = await client.get("/api/v3/Init/Status")
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Shoko health check failed: {e}")
+            return False
+
+
+# Singleton HTTP client instance
+shoko_http_client = ShokoHTTPClient()

@@ -75,6 +75,7 @@ async def run_migrations(conn):
     migrations = {
         "deletion_logs": {
             "status": ("VARCHAR(20)", "'IN_PROGRESS'"),
+            "qbit_hash": ("VARCHAR(100)", "NULL"),
         },
         # Add future migrations here:
         # "requests": {

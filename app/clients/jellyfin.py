@@ -155,7 +155,8 @@ class JellyfinClient:
             item_id: Jellyfin item ID (used for logging)
 
         Returns:
-            Tuple of (success, message)
+            Tuple of (success, message) - returns False on actual failures
+            so the orchestrator can track incomplete syncs.
         """
         try:
             client = await self._get_client()
@@ -167,18 +168,20 @@ class JellyfinClient:
                 logger.info(f"Triggered Jellyfin library scan (item {item_id} will be removed if files missing)")
                 return True, "Library scan triggered - item will be removed automatically"
             else:
-                # Even if scan trigger fails, files are already deleted
-                # Jellyfin will eventually detect this on scheduled scan
-                logger.warning(f"Library scan trigger returned {response.status_code}, but files already deleted")
-                return True, f"Files deleted - Jellyfin will sync on next scheduled scan"
+                # Scan trigger failed - report this so orchestrator knows
+                error_msg = f"Library scan trigger failed with status {response.status_code}"
+                logger.warning(error_msg)
+                return False, error_msg
 
         except httpx.RequestError as e:
-            # Network error, but files are already deleted by Radarr/Sonarr
-            logger.warning(f"Could not trigger Jellyfin scan: {e}")
-            return True, "Files deleted - Jellyfin will sync on next scheduled scan"
+            # Network error - can't trigger scan, report failure
+            error_msg = f"Network error triggering Jellyfin scan: {e}"
+            logger.warning(error_msg)
+            return False, error_msg
         except Exception as e:
-            logger.warning(f"Jellyfin scan trigger error: {e}")
-            return True, "Files deleted - Jellyfin will sync on next scheduled scan"
+            error_msg = f"Error triggering Jellyfin scan: {e}"
+            logger.warning(error_msg)
+            return False, error_msg
 
     async def get_item(self, item_id: str) -> Optional[dict]:
         """

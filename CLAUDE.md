@@ -61,6 +61,14 @@ cp .env.template .env
 docker compose up -d --build
 ```
 
+### AdeptLab Infrastructure
+
+**Quick deploy:** `~/git/homeserver/scripts/deploy-status-tracker.sh`
+
+**Full docs:** `~/git/homeserver/configs/dev/services/status-tracker/README.md`
+
+**Security:** `~/git/homeserver/context/core/security.md`
+
 ## Key Files
 
 | Purpose | File |
