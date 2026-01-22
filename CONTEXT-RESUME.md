@@ -1,7 +1,7 @@
 # Status Tracker - Context Resume Prompt
 
-**Last Updated:** 2026-01-22 (SSE Fix + VFS Refresh Session)
-**Branch:** `fix/media-workflow-audit`
+**Last Updated:** 2026-01-22 (Per-Episode Tracking Session)
+**Branch:** `feature/per-episode-tracking`
 
 ---
 
@@ -11,7 +11,7 @@
 
 I'm continuing work on the **status-tracker** app. Read these files for context:
 
-1. `/home/adept/git/status-tracker-workflow-fix/docs/flows/SESSION-HANDOFF-2026-01-22-SSE-FIX.md`
+1. `/home/adept/git/status-tracker-workflow-fix/docs/flows/SESSION-HANDOFF-2026-01-22-PER-EPISODE.md`
 2. `/home/adept/git/status-tracker-workflow-fix/DIARY.md`
 3. `/home/adept/git/status-tracker-workflow-fix/docs/MVP.md`
 
@@ -25,36 +25,31 @@ I'm continuing work on the **status-tracker** app. Read these files for context:
 
 ### Completed This Session ✅
 
-1. **Fixed SSE Live Updates** - Renamed `sse:refresh` → `status-update` (htmx reserved prefix conflict)
-   - Files: `app/templates/index.html`, `app/templates/detail.html`
+1. **Per-Episode Tracking UI** - Dashboard cards show episode progress bar + expandable list
+   - Files: `app/schemas.py`, `app/routers/api.py`, `app/routers/pages.py`
+   - Files: `app/templates/components/card.html`, `app/templates/detail.html`
 
-2. **Added Diagnostic Logging** - Broadcast tracking for debugging
-   - Files: `app/core/broadcaster.py`, `app/routers/sse.py`
+2. **Increased Polling Speed** - qBit polling faster for responsive updates
+   - File: `app/plugins/qbittorrent.py`
+   - POLL_FAST: 5s → 3s, POLL_SLOW: 30s → 15s
 
-3. **Enhanced Fallback Checker** - Now triggers Jellyfin library scan for `ANIME_MATCHING` requests to force Shokofin VFS regeneration
-   - File: `app/services/jellyfin_verifier.py`
-   - Tested successfully with "Rascal Does Not Dream of a Dreaming Girl"
-
-4. **Created Issue** - IMPORTING state skipped for anime
-   - File: `docs/issues/2026-01-22-importing-state-skipped-for-anime.md`
+3. **Deployed to Dev Server** - All changes live on LXC 220
 
 ### NOT YET DONE ❌
 
-1. **Commit changes** - All above changes are uncommitted!
+1. **Commit per-episode changes** - Deployed but NOT committed!
    ```bash
    cd /home/adept/git/status-tracker-workflow-fix
-   git add -A && git commit -m "Add VFS refresh to fallback checker, diagnostic logging" && git push
+   git add -A && git commit -m "Add per-episode tracking UI, increase polling speed" && git push
    ```
 
-2. **Per-episode monitoring gap** - Episodes ARE created in DB but NOT displayed:
-   - `Episode` model exists (`app/models.py:299`)
-   - Episodes created on Sonarr grab (`app/plugins/sonarr.py`)
-   - `EpisodeResponse` schema exists (`app/schemas.py:91`)
-   - **MISSING:** `episodes` field not in `MediaRequestResponse` schema
-   - **MISSING:** UI doesn't show per-episode progress
-   - Issue file: `issues/per-episode-download-tracking.md`
+2. **Lycoris Recoil stuck at anime_matching** - Shokofin VFS issue, NOT status-tracker:
+   - Files in correct location: `/data/anime/shows/Lycoris Recoil/`
+   - Shoko matched the series ✅
+   - Shokofin VFS doesn't include it ❌
+   - **Next step:** Check Shoko web UI → Import Folders
 
-3. **Test Lycoris Recoil** - TV anime currently at `approved` state
+3. **Test per-episode UI** - Need working TV anime to verify UI works
 
 ---
 
@@ -80,10 +75,11 @@ REQUESTED → APPROVED → GRABBING → DOWNLOADING → DOWNLOADED → IMPORTING
 | State machine | `app/core/state_machine.py` |
 | Broadcaster | `app/core/broadcaster.py` |
 | Fallback checker | `app/services/jellyfin_verifier.py` |
-| Sonarr plugin | `app/plugins/sonarr.py` |
+| qBit polling | `app/plugins/qbittorrent.py` |
 | Episode model | `app/models.py:299` |
 | API schemas | `app/schemas.py` |
-| Templates | `app/templates/index.html`, `detail.html` |
+| Card template | `app/templates/components/card.html` |
+| Detail template | `app/templates/detail.html` |
 
 ---
 
@@ -122,7 +118,7 @@ ssh root@10.0.2.10 "pct exec 220 -- docker logs status-tracker --tail 50"
 
 | ID | Title | State | Type |
 |----|-------|-------|------|
-| 6 | Lycoris Recoil | approved | TV/Anime |
+| 6 | Lycoris Recoil | anime_matching | TV/Anime (STUCK) |
 | 5 | Rascal Does Not Dream... | available | Movie |
 | 4 | Your Name. | available | Movie |
 | 2 | SNAFU | available | TV |
@@ -130,14 +126,34 @@ ssh root@10.0.2.10 "pct exec 220 -- docker logs status-tracker --tail 50"
 
 ---
 
-## Roadmap (from DIARY.md)
+## VFS Troubleshooting
+
+### Check VFS contents
+```bash
+ssh root@10.0.2.10 "pct exec 220 -- docker exec jellyfin ls -la '/config/Shokofin/VFS/29391378-c411-8b35-b77f-84980d25f0a6/'"
+```
+
+### Library IDs
+| Library | VFS ID |
+|---------|--------|
+| Anime Shows | `29391378-c411-8b35-b77f-84980d25f0a6` |
+| Anime Movies | `abebc196-cc1b-8bbf-6f8b-b5ca7b5ad6f1` |
+
+### Check Shokofin SignalR
+```bash
+ssh root@10.0.2.10 "pct exec 220 -- docker logs jellyfin 2>&1" | grep -i 'signalr.*connected'
+```
+
+---
+
+## Roadmap
 
 | Priority | Task |
 |----------|------|
-| 1 | Fix IMPORTING state skipped for anime |
-| 2 | Test anime TV shows |
-| 3 | Media sync button |
-| 4 | Fix delete integration |
+| 1 | Fix Lycoris Recoil (Shoko import folder config) |
+| 2 | Commit per-episode changes |
+| 3 | Test per-episode UI |
+| 4 | Fix IMPORTING state skipped for anime |
 
 ---
 
