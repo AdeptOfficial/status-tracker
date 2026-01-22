@@ -22,6 +22,42 @@ Development log for the status-tracker project. New entries at the top.
 
 ---
 
+## 2026-01-22: Fixed SSE Live Updates Not Pushing to Frontend
+
+### Problem
+
+Dashboard showed "Live updates active" (green indicator) but state changes weren't updating the UI. Users had to manually refresh to see updated states.
+
+### Root Cause
+
+The custom event name `sse:refresh` conflicted with htmx's built-in SSE extension. When htmx sees `hx-trigger="sse:eventname"`, it expects the element to have `sse-connect` attribute and tries to use its SSE extension instead of listening for a custom DOM event.
+
+Browser console showed: `htmx:noSSESourceError`
+
+### Fix
+
+Renamed the custom event from `sse:refresh` to `status-update` in both templates:
+
+**Files changed:**
+- `app/templates/index.html` - `hx-trigger` and `htmx.trigger()` call
+- `app/templates/detail.html` - `hx-trigger` and `htmx.trigger()` call
+
+### Diagnostic Logging Added
+
+Also added logging to help debug future SSE issues:
+- `app/core/broadcaster.py` - logs client count and request details at broadcast time
+- `app/routers/sse.py` - logs when yielding events to clients
+
+### Learning
+
+htmx reserves certain prefixes for its extensions (`sse:`, `ws:`, `htmx:`). When using native JavaScript EventSource with custom events that trigger htmx, avoid these prefixes.
+
+### Verification
+
+Tested with "Rascal Does Not Dream of a Dreaming Girl" request - UI updated in real-time showing download progress, speed, and ETA without manual refresh.
+
+---
+
 ## 2026-01-21: Anime TV Show Testing - Fallback Checker Needed
 
 ### Summary

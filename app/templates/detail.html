@@ -49,7 +49,7 @@
     <!-- Main content grid (refreshed via SSE) -->
     <div id="detail-main"
          hx-get="/request/{{ media_request.id }}"
-         hx-trigger="sse:refresh"
+         hx-trigger="status-update"
          hx-select="#detail-main"
          hx-swap="outerHTML"
          class="grid gap-6 lg:grid-cols-3">
@@ -403,7 +403,8 @@
                     updateConnectionStatus(true, 'Updating...');
 
                     // Trigger htmx to refresh the detail content
-                    htmx.trigger('#detail-main', 'sse:refresh');
+                    // Note: Can't use 'sse:' prefix - htmx interprets that as its SSE extension
+                    htmx.trigger('#detail-main', 'status-update');
 
                     setTimeout(() => {
                         updateConnectionStatus(true, 'Live updates active');

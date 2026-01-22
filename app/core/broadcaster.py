@@ -63,7 +63,11 @@ class Broadcaster:
             event_type: SSE event name (e.g., 'update', 'progress')
             data: Dictionary to JSON-serialize and send
         """
+        client_count = len(self._clients)
+        logger.info(f"Broadcasting '{event_type}' to {client_count} clients")
+
         if not self._clients:
+            logger.warning("No SSE clients connected - update will be lost")
             return
 
         message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
@@ -87,6 +91,10 @@ class Broadcaster:
             request: The updated MediaRequest
             event_type: Type of update (state_change, progress_update, new_request)
         """
+        logger.info(
+            f"broadcast_update called: request_id={request.id}, "
+            f"title='{request.title}', state='{request.state}', event_type='{event_type}'"
+        )
         # Convert to response schema
         request_data = MediaRequestResponse.model_validate(request).model_dump(
             mode="json"

@@ -21,7 +21,7 @@
     <!-- Request cards (this container refreshes on SSE updates) -->
     <div id="request-list"
          hx-get="/"
-         hx-trigger="sse:refresh"
+         hx-trigger="status-update"
          hx-select="#request-list"
          hx-swap="outerHTML"
          class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -111,8 +111,8 @@
             }
 
             // Trigger htmx to refresh the list
-            // This fires the 'sse:refresh' custom event that htmx is listening for
-            htmx.trigger('#request-list', 'sse:refresh');
+            // Note: Can't use 'sse:' prefix - htmx interprets that as its SSE extension
+            htmx.trigger('#request-list', 'status-update');
         });
 
         eventSource.onerror = function(e) {

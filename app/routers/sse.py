@@ -69,6 +69,7 @@ async def sse_endpoint():
                 elif line.startswith("data: "):
                     data = line[6:]
 
+            logger.debug(f"Yielding SSE event: {event_name}, data_preview={data[:100] if data else 'empty'}...")
             yield {
                 "event": event_name,
                 "data": data,
