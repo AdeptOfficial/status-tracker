@@ -2,31 +2,53 @@
 
 import enum
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import String, Integer, DateTime, Enum, ForeignKey, Text, Float
+from sqlalchemy import String, Integer, DateTime, Enum, ForeignKey, Text, Float, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from typing import List
 
 
 class RequestState(str, enum.Enum):
     """
     States a media request can be in.
     Order roughly follows the lifecycle:
-    REQUESTED -> APPROVED -> INDEXED -> DOWNLOADING -> DOWNLOAD_DONE -> IMPORTING -> [ANIME_MATCHING] -> AVAILABLE
+    REQUESTED -> APPROVED -> GRABBING -> DOWNLOADING -> DOWNLOADED -> IMPORTING -> [ANIME_MATCHING] -> AVAILABLE
     """
 
     REQUESTED = "requested"  # Initial request in Jellyseerr
     APPROVED = "approved"  # Request approved, waiting for grab
-    INDEXED = "indexed"  # Sonarr/Radarr grabbed from indexer
+    GRABBING = "grabbing"  # Sonarr/Radarr grabbed from indexer (was INDEXED)
     DOWNLOADING = "downloading"  # qBittorrent actively downloading
-    DOWNLOAD_DONE = "download_done"  # Download complete, waiting for import
+    DOWNLOADED = "downloaded"  # Download complete, waiting for import (was DOWNLOAD_DONE)
     IMPORTING = "importing"  # Sonarr/Radarr importing to library
     ANIME_MATCHING = "anime_matching"  # Shoko matching anime metadata
     AVAILABLE = "available"  # Ready to watch in Jellyfin
     FAILED = "failed"  # Something went wrong
     TIMEOUT = "timeout"  # Stuck in a state too long
+
+    # Aliases for backward compatibility during migration
+    INDEXED = "grabbing"  # Deprecated: use GRABBING
+    DOWNLOAD_DONE = "downloaded"  # Deprecated: use DOWNLOADED
+
+
+class EpisodeState(str, enum.Enum):
+    """
+    States an individual episode can be in.
+    Similar to RequestState but without REQUESTED/APPROVED (episodes are created at grab).
+    """
+
+    GRABBING = "grabbing"  # Sonarr grabbed, qBit queued
+    DOWNLOADING = "downloading"  # qBit actively downloading
+    DOWNLOADED = "downloaded"  # qBit complete, waiting for import
+    IMPORTING = "importing"  # Sonarr importing to library
+    ANIME_MATCHING = "anime_matching"  # Shoko matching (anime only)
+    AVAILABLE = "available"  # In Jellyfin, ready to watch
+    FAILED = "failed"  # Error occurred
 
 
 class DeletionSource(str, enum.Enum):
@@ -94,6 +116,7 @@ class MediaRequest(Base):
     jellyseerr_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     tmdb_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     tvdb_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    imdb_id: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # From Radarr/Sonarr Grab
     qbit_hash: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True, index=True
     )
@@ -102,6 +125,9 @@ class MediaRequest(Base):
     sonarr_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Sonarr series ID
     radarr_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Radarr movie ID
     shoko_series_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Shoko series ID
+
+    # Anime detection flag (set at Grab time from movie.tags or series.type)
+    is_anime: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=None)
 
     # Download info (populated during DOWNLOADING)
     download_progress: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -112,13 +138,17 @@ class MediaRequest(Base):
         String(50), nullable=True
     )  # e.g., "2h 15m"
 
-    # Quality/source info (populated on INDEXED)
+    # Quality/source info (populated on GRABBING)
     quality: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True
     )  # e.g., "WEBDL-1080p"
     indexer: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True
     )  # e.g., "1337x"
+
+    # Release info from Grab webhook
+    file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # bytes
+    release_group: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # File info (populated on IMPORTING)
     download_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
@@ -133,10 +163,15 @@ class MediaRequest(Base):
     )  # Username
     poster_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    overview: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # From Jellyseerr message
 
-    # For TV: season/episode info
+    # For TV: season/episode info (legacy - use Episode table for per-episode tracking)
     season: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     episode: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # TV-specific (new per-episode tracking)
+    requested_seasons: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # "1" or "1,2,3"
+    total_episodes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Count of Episode rows
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -144,10 +179,14 @@ class MediaRequest(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
     state_changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    available_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # When reached AVAILABLE
 
     # Relationships
     timeline_events: Mapped[list["TimelineEvent"]] = relationship(
         back_populates="request", cascade="all, delete-orphan", order_by="TimelineEvent.timestamp"
+    )
+    episodes: Mapped[list["Episode"]] = relationship(
+        back_populates="request", cascade="all, delete-orphan", order_by="Episode.season_number, Episode.episode_number"
     )
 
 
@@ -255,3 +294,51 @@ class DeletionSyncEvent(Base):
 
     # Relationships
     deletion_log: Mapped["DeletionLog"] = relationship(back_populates="sync_events")
+
+
+class Episode(Base):
+    """
+    Individual episode tracking for TV shows.
+
+    Created at Grab time from Sonarr webhook episodes[] array.
+    Season packs: all episodes share the same qbit_hash.
+    Individual grabs: each episode may have a different qbit_hash.
+    """
+
+    __tablename__ = "episodes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), index=True)
+
+    # Episode identification
+    season_number: Mapped[int] = mapped_column(Integer)
+    episode_number: Mapped[int] = mapped_column(Integer)
+    episode_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # From Sonarr Grab webhook
+
+    # Service IDs (from Sonarr Grab webhook)
+    sonarr_episode_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    episode_tvdb_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # State tracking
+    state: Mapped[EpisodeState] = mapped_column(Enum(EpisodeState), default=EpisodeState.GRABBING)
+
+    # Download tracking (shared for season packs)
+    qbit_hash: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+
+    # File path (from Sonarr Import webhook)
+    final_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+
+    # Anime matching (from Shoko)
+    shoko_file_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    # Jellyfin (from verification)
+    jellyfin_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # Relationships
+    request: Mapped["MediaRequest"] = relationship(back_populates="episodes")

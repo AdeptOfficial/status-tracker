@@ -27,6 +27,8 @@ engine = create_async_engine(
     database_url,
     echo=False,  # Set True for SQL debugging
     future=True,
+    # SQLite concurrency settings to prevent "database is locked" errors
+    connect_args={"check_same_thread": False, "timeout": 30},
 )
 
 async_session_maker = async_sessionmaker(
@@ -100,14 +102,20 @@ async def init_db():
     """
     Initialize database on startup.
 
-    1. Create any new tables (create_all)
-    2. Run migrations to add missing columns to existing tables
+    1. Enable WAL mode for better concurrency
+    2. Create any new tables (create_all)
+    3. Run migrations to add missing columns to existing tables
     """
     async with engine.begin() as conn:
-        # First, create any new tables
+        # Enable WAL mode for concurrent reads during writes
+        # This prevents "database is locked" errors from async operations
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
+        await conn.execute(text("PRAGMA busy_timeout=5000"))
+
+        # Create any new tables
         await conn.run_sync(Base.metadata.create_all)
 
-        # Then, run migrations for missing columns
+        # Run migrations for missing columns
         await run_migrations(conn)
 
-    logger.info("Database schema up to date")
+    logger.info("Database initialized with WAL mode")

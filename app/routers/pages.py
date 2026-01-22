@@ -70,9 +70,9 @@ async def index(
     active_states = [
         RequestState.REQUESTED,
         RequestState.APPROVED,
-        RequestState.INDEXED,
+        RequestState.GRABBING,
         RequestState.DOWNLOADING,
-        RequestState.DOWNLOAD_DONE,
+        RequestState.DOWNLOADED,
         RequestState.IMPORTING,
         RequestState.ANIME_MATCHING,
     ]

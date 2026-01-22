@@ -1,8 +1,8 @@
 """qBittorrent plugin - tracks download progress and completion.
 
 qBittorrent integration uses two methods:
-1. Polling: Check progress every 5s for active downloads (DOWNLOADING state)
-2. Webhook: "Run on complete" script triggers completion (DOWNLOAD_DONE state)
+1. Polling: Adaptive polling (5s active, 30s idle) for download progress
+2. Webhook: "Run on complete" script triggers completion (DOWNLOADED state)
 
 Webhook setup in qBittorrent:
   Options -> Downloads -> "Run external program on torrent finished"
@@ -16,10 +16,22 @@ Webhook setup in qBittorrent:
     %N = torrent name
     %D = save path
     %Z = torrent size
+
+Episode Tracking:
+- For TV shows, all episodes in a season pack share the same qbit_hash
+- When polling updates progress, both the request AND all matching episodes are updated
+- Episode states are updated: GRABBING → DOWNLOADING → DOWNLOADED
+
+Adaptive Polling:
+- POLL_FAST (5s): When there are active downloads (GRABBING or DOWNLOADING)
+- POLL_SLOW (30s): When no active downloads (idle)
 """
 
 import logging
 from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
 from app.core.plugin_base import ServicePlugin
 from app.core.correlator import correlator
@@ -30,12 +42,17 @@ from app.clients.qbittorrent import (
     format_eta,
     format_size,
 )
-from app.models import MediaRequest, RequestState
+from app.models import MediaRequest, MediaType, RequestState, Episode, EpisodeState
+from app.services.state_calculator import calculate_aggregate_state
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+# Adaptive polling intervals
+POLL_FAST = 5   # seconds when downloads active
+POLL_SLOW = 30  # seconds when idle
 
 
 class QBittorrentPlugin(ServicePlugin):
@@ -54,7 +71,7 @@ class QBittorrentPlugin(ServicePlugin):
 
     @property
     def states_provided(self) -> list[RequestState]:
-        return [RequestState.DOWNLOADING, RequestState.DOWNLOAD_DONE]
+        return [RequestState.DOWNLOADING, RequestState.DOWNLOADED]
 
     @property
     def correlation_fields(self) -> list[str]:
@@ -66,7 +83,21 @@ class QBittorrentPlugin(ServicePlugin):
 
     @property
     def poll_interval(self) -> int:
-        return 5  # Check every 5 seconds
+        return POLL_FAST  # Default minimum interval
+
+    async def get_adaptive_poll_interval(self, db: "AsyncSession") -> int:
+        """
+        Return polling interval based on active downloads.
+
+        Checks database for requests in GRABBING or DOWNLOADING state.
+        Returns POLL_FAST (5s) if active downloads, POLL_SLOW (30s) if idle.
+        """
+        active_count = await db.scalar(
+            select(func.count()).select_from(MediaRequest).where(
+                MediaRequest.state.in_([RequestState.GRABBING, RequestState.DOWNLOADING])
+            )
+        )
+        return POLL_FAST if active_count and active_count > 0 else POLL_SLOW
 
     async def _get_client(self) -> QBittorrentClient:
         """Get or create qBittorrent client."""
@@ -99,8 +130,14 @@ class QBittorrentPlugin(ServicePlugin):
 
         logger.info(f"qBittorrent complete webhook: {torrent_name} ({torrent_hash[:8]}...)")
 
-        # Find request by torrent hash
-        request = await correlator.find_by_hash(db, torrent_hash)
+        # Find request by torrent hash (need eager loading for TV episodes)
+        stmt = (
+            select(MediaRequest)
+            .options(selectinload(MediaRequest.episodes))
+            .where(MediaRequest.qbit_hash == torrent_hash.upper())
+        )
+        result = await db.execute(stmt)
+        request = result.scalar_one_or_none()
 
         if not request:
             logger.debug(f"No matching request found for hash {torrent_hash[:8]}...")
@@ -115,9 +152,21 @@ class QBittorrentPlugin(ServicePlugin):
         request.download_speed = None
         request.download_eta = None
 
+        # Update episode states for TV shows
+        if request.media_type == MediaType.TV and request.episodes:
+            for episode in request.episodes:
+                if episode.state == EpisodeState.DOWNLOADING:
+                    episode.state = EpisodeState.DOWNLOADED
+
+        # Determine target state
+        if request.media_type == MediaType.TV:
+            target_state = calculate_aggregate_state(request)
+        else:
+            target_state = RequestState.DOWNLOADED
+
         await state_machine.transition(
             request,
-            RequestState.DOWNLOAD_DONE,
+            target_state,
             db,
             service=self.name,
             event_type="Complete",
@@ -133,14 +182,14 @@ class QBittorrentPlugin(ServicePlugin):
         Poll qBittorrent for download progress updates.
 
         Called every poll_interval seconds.
-        Updates progress for all requests in INDEXED or DOWNLOADING state
+        Updates progress for all requests in GRABBING or DOWNLOADING state
         that have a qbit_hash.
+
+        For TV shows, also updates Episode states.
         """
         updated_requests = []
 
-        # Find all requests that should be tracked
-        # INDEXED: Waiting for download to start
-        # DOWNLOADING: Already downloading, need progress updates
+        # Find all requests that should be tracked (with eager loaded episodes)
         active_requests = await self._get_trackable_requests(db)
 
         if not active_requests:
@@ -178,13 +227,17 @@ class QBittorrentPlugin(ServicePlugin):
     async def _get_trackable_requests(
         self, db: "AsyncSession"
     ) -> list[MediaRequest]:
-        """Get requests that should be tracked for download progress."""
-        from sqlalchemy import select
-        from app.models import MediaRequest, RequestState
+        """Get requests that should be tracked for download progress.
 
-        stmt = select(MediaRequest).where(
-            MediaRequest.state.in_([RequestState.INDEXED, RequestState.DOWNLOADING]),
-            MediaRequest.qbit_hash.isnot(None),
+        Eager loads episodes for TV shows to update their states.
+        """
+        stmt = (
+            select(MediaRequest)
+            .options(selectinload(MediaRequest.episodes))
+            .where(
+                MediaRequest.state.in_([RequestState.GRABBING, RequestState.DOWNLOADING]),
+                MediaRequest.qbit_hash.isnot(None),
+            )
         )
         result = await db.execute(stmt)
         return list(result.scalars().all())
@@ -197,6 +250,8 @@ class QBittorrentPlugin(ServicePlugin):
     ) -> bool:
         """
         Update request with torrent progress.
+
+        For TV shows, also updates Episode states.
 
         Returns True if request was updated.
         """
@@ -218,7 +273,13 @@ class QBittorrentPlugin(ServicePlugin):
         request.download_eta = format_eta(torrent.eta) if torrent.eta > 0 else None
 
         # Determine if state change needed
-        if request.state == RequestState.INDEXED and is_downloading:
+        if request.state == RequestState.GRABBING and is_downloading:
+            # Update episode states for TV shows
+            if request.media_type == MediaType.TV and request.episodes:
+                for episode in request.episodes:
+                    if episode.state == EpisodeState.GRABBING:
+                        episode.state = EpisodeState.DOWNLOADING
+
             # Transition to DOWNLOADING
             await state_machine.transition(
                 request,
@@ -235,9 +296,21 @@ class QBittorrentPlugin(ServicePlugin):
         elif request.state == RequestState.DOWNLOADING:
             # Check for completion
             if is_complete or progress >= 1.0:
+                # Update episode states for TV shows
+                if request.media_type == MediaType.TV and request.episodes:
+                    for episode in request.episodes:
+                        if episode.state == EpisodeState.DOWNLOADING:
+                            episode.state = EpisodeState.DOWNLOADED
+
+                # For TV, use aggregate state; for movies, use DOWNLOADED directly
+                if request.media_type == MediaType.TV:
+                    target_state = calculate_aggregate_state(request)
+                else:
+                    target_state = RequestState.DOWNLOADED
+
                 await state_machine.transition(
                     request,
-                    RequestState.DOWNLOAD_DONE,
+                    target_state,
                     db,
                     service=self.name,
                     event_type="Complete",

@@ -5,7 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
-from app.models import RequestState, MediaType, DeletionSource, ServiceSyncStatus, DeletionStatus
+from app.models import RequestState, MediaType, DeletionSource, ServiceSyncStatus, DeletionStatus, EpisodeState
 
 
 # ============================================
@@ -42,6 +42,9 @@ class MediaRequestResponse(BaseModel):
     sonarr_id: Optional[int] = None
     radarr_id: Optional[int] = None
     shoko_series_id: Optional[int] = None
+
+    # Anime detection
+    is_anime: Optional[bool] = None
 
     # Download info
     download_progress: Optional[float] = None
@@ -83,6 +86,40 @@ class MediaRequestDetailResponse(MediaRequestResponse):
     """Media request with full timeline."""
 
     timeline_events: list[TimelineEventResponse] = []
+
+
+class EpisodeResponse(BaseModel):
+    """Single episode for API response."""
+
+    id: int
+    request_id: int
+    season_number: int
+    episode_number: int
+    episode_title: Optional[str] = None
+    state: EpisodeState
+
+    # Service IDs
+    sonarr_episode_id: Optional[int] = None
+    episode_tvdb_id: Optional[int] = None
+
+    # Download tracking
+    qbit_hash: Optional[str] = None
+
+    # File path
+    final_path: Optional[str] = None
+
+    # Anime matching
+    shoko_file_id: Optional[str] = None
+
+    # Jellyfin
+    jellyfin_id: Optional[str] = None
+
+    # Timestamps
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class RequestListResponse(BaseModel):

@@ -1,0 +1,66 @@
+{
+  "movie": {
+    "id": 52,
+    "title": "Violet Evergarden: The Movie",
+    "year": 2020,
+    "releaseDate": "2021-10-13",
+    "folderPath": "/data/anime/movies/Violet Evergarden - The Movie (2020)",
+    "tmdbId": 533514,
+    "imdbId": "tt8652818",
+    "overview": "As the world moves on from the war and technological advances bring changes to her life, Violet still hopes to see her lost commanding officer again.",
+    "genres": ["Animation", "Fantasy", "Romance", "Drama"],
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "/MediaCover/52/poster.jpg?lastWrite=639046525018477211",
+        "remoteUrl": "https://image.tmdb.org/t/p/original/4b7uAGVtgA85Yd911yOJqIsHigx.jpg"
+      },
+      {
+        "coverType": "fanart",
+        "url": "/MediaCover/52/fanart.jpg?lastWrite=639046525019237240",
+        "remoteUrl": "https://image.tmdb.org/t/p/original/wGwSWDG3LIQxchg2M8HV7bDqYKU.jpg"
+      }
+    ],
+    "tags": ["anime"],
+    "originalLanguage": {
+      "id": 8,
+      "name": "Japanese"
+    }
+  },
+  "remoteMovie": {
+    "tmdbId": 533514,
+    "imdbId": "tt8652818",
+    "title": "Violet Evergarden: The Movie",
+    "year": 2020
+  },
+  "release": {
+    "quality": "Bluray-1080p",
+    "qualityVersion": 1,
+    "releaseGroup": "The-Nut",
+    "releaseTitle": "[The-Nut] Violet Evergarden The Movie 2020 [BD][1080p 10bit AV1]",
+    "indexer": "Nyaa.si (Prowlarr)",
+    "size": 1181116032,
+    "customFormatScore": 0,
+    "customFormats": ["10bit", "AV1"],
+    "languages": [
+      {
+        "id": 8,
+        "name": "Japanese"
+      }
+    ],
+    "indexerFlags": ["G_Freeleech"]
+  },
+  "downloadClient": "qBittorrent (VPN)",
+  "downloadClientType": "qBittorrent",
+  "downloadId": "C2C60F66C126652A86F7F2EE73DC83D4E255929E",
+  "customFormatInfo": {
+    "customFormats": [
+      {"id": 34, "name": "10bit"},
+      {"id": 51, "name": "AV1"}
+    ],
+    "customFormatScore": 0
+  },
+  "eventType": "Grab",
+  "instanceName": "Radarr",
+  "applicationUrl": ""
+}

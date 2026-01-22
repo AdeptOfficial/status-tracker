@@ -41,7 +41,7 @@ class RadarrPlugin(ServicePlugin):
 
     @property
     def states_provided(self) -> list[RequestState]:
-        return [RequestState.INDEXED, RequestState.IMPORTING]
+        return [RequestState.GRABBING, RequestState.IMPORTING]
 
     @property
     def correlation_fields(self) -> list[str]:
@@ -160,11 +160,24 @@ class RadarrPlugin(ServicePlugin):
         if download_id:
             request.qbit_hash = download_id
 
+        # Store IMDB ID from movie
+        imdb_id = movie.get("imdbId")
+        if imdb_id:
+            request.imdb_id = imdb_id
+
+        # Detect is_anime from tags array
+        tags = movie.get("tags", [])
+        request.is_anime = "anime" in [str(t).lower() for t in tags]
+
         # Store quality and indexer info
         quality = release.get("quality") or release.get("qualityName", "Unknown")
         indexer = release.get("indexer", "")
         request.quality = quality
         request.indexer = indexer
+
+        # Store release info
+        request.file_size = release.get("size")
+        request.release_group = release.get("releaseGroup")
 
         # Store year if available
         year = movie.get("year")
@@ -180,7 +193,7 @@ class RadarrPlugin(ServicePlugin):
 
         await state_machine.transition(
             request,
-            RequestState.INDEXED,
+            RequestState.GRABBING,
             db,
             service=self.name,
             event_type="Grab",
@@ -190,7 +203,7 @@ class RadarrPlugin(ServicePlugin):
 
         logger.info(
             f"Radarr grab: {request.title} - {quality} "
-            f"(hash: {download_id[:8] if download_id else 'N/A'}...)"
+            f"(hash: {download_id[:8] if download_id else 'N/A'}..., is_anime={request.is_anime})"
         )
         return request
 
@@ -206,7 +219,7 @@ class RadarrPlugin(ServicePlugin):
         if radarr_id and not request.radarr_id:
             request.radarr_id = radarr_id
 
-        # Store file path for Shoko/Jellyfin correlation
+        # Store file path for Shoko/Jellyfin correlation - CRITICAL for anime matching
         file_path = movie_file.get("path", "")
         if file_path:
             request.final_path = file_path
@@ -215,15 +228,28 @@ class RadarrPlugin(ServicePlugin):
         if not request.quality:
             request.quality = movie_file.get("quality", "")
 
+        # Detect is_anime from path if not already set (fallback detection)
+        if request.is_anime is None:
+            # Check if path contains /anime/ directory
+            request.is_anime = "/anime/" in file_path.lower() if file_path else False
+
         details = "Imported to library"
         if file_path:
             # Show just the filename for readability
             filename = file_path.split("/")[-1] if "/" in file_path else file_path
             details = f"Importing: {filename}"
 
+        # Route to appropriate state based on is_anime flag
+        if request.is_anime:
+            # Anime needs Shoko matching before Jellyfin verification
+            target_state = RequestState.ANIME_MATCHING
+        else:
+            # Regular movie goes directly to IMPORTING for Jellyfin verification
+            target_state = RequestState.IMPORTING
+
         await state_machine.transition(
             request,
-            RequestState.IMPORTING,
+            target_state,
             db,
             service=self.name,
             event_type="Import",
@@ -231,7 +257,7 @@ class RadarrPlugin(ServicePlugin):
             raw_data=payload,
         )
 
-        logger.info(f"Radarr import: {request.title}")
+        logger.info(f"Radarr import: {request.title} -> {target_state.value}")
         return request
 
     async def _handle_movie_delete(

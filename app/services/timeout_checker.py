@@ -39,8 +39,8 @@ def get_state_timeouts() -> dict[RequestState, int]:
         RequestState.DOWNLOADING: settings.DOWNLOADING_TIMEOUT,
         RequestState.IMPORTING: settings.IMPORTING_TIMEOUT,
         RequestState.ANIME_MATCHING: 30,    # 30 min - Shoko matching
-        RequestState.DOWNLOAD_DONE: 30,     # 30 min - waiting for import
-        RequestState.INDEXED: 60,           # 1 hour - waiting for download to start
+        RequestState.DOWNLOADED: 30,        # 30 min - waiting for import
+        RequestState.GRABBING: 60,          # 1 hour - waiting for download to start
         RequestState.APPROVED: 120,         # 2 hours - waiting for indexer grab
     }
 
@@ -88,11 +88,12 @@ async def check_timeouts(db: "AsyncSession") -> list[MediaRequest]:
 
             if success:
                 timed_out.append(request)
-                # Broadcast the change
-                await broadcaster.broadcast_update(request)
 
     if timed_out:
         await db.commit()
+        # Broadcast AFTER commit so frontend fetches committed data
+        for request in timed_out:
+            await broadcaster.broadcast_update(request)
         logger.info(f"Timed out {len(timed_out)} stuck requests")
 
     return timed_out

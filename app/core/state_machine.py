@@ -21,28 +21,28 @@ logger = logging.getLogger(__name__)
 #
 # Special cases:
 # - APPROVED → AVAILABLE: Content already exists in library (no download needed)
-# - INDEXED → IMPORTING: When qBittorrent polling isn't active
-# - When qBit plugin is active, normal flow is INDEXED → DOWNLOADING → DOWNLOAD_DONE → IMPORTING
+# - GRABBING → IMPORTING: When qBittorrent polling isn't active
+# - When qBit plugin is active, normal flow is GRABBING → DOWNLOADING → DOWNLOADED → IMPORTING
 VALID_TRANSITIONS: dict[RequestState, list[RequestState]] = {
     RequestState.REQUESTED: [RequestState.APPROVED, RequestState.FAILED],
-    RequestState.APPROVED: [RequestState.INDEXED, RequestState.AVAILABLE, RequestState.FAILED],
-    RequestState.INDEXED: [RequestState.DOWNLOADING, RequestState.IMPORTING, RequestState.FAILED],
+    RequestState.APPROVED: [RequestState.GRABBING, RequestState.AVAILABLE, RequestState.FAILED],
+    RequestState.GRABBING: [RequestState.DOWNLOADING, RequestState.IMPORTING, RequestState.FAILED],
     RequestState.DOWNLOADING: [
-        RequestState.DOWNLOAD_DONE,
+        RequestState.DOWNLOADED,
         RequestState.FAILED,
         RequestState.TIMEOUT,
     ],
-    RequestState.DOWNLOAD_DONE: [RequestState.IMPORTING, RequestState.FAILED],
+    RequestState.DOWNLOADED: [RequestState.IMPORTING, RequestState.ANIME_MATCHING, RequestState.FAILED],
     RequestState.IMPORTING: [
-        RequestState.ANIME_MATCHING,
         RequestState.AVAILABLE,
+        RequestState.ANIME_MATCHING,  # Shoko detects anime file
         RequestState.FAILED,
         RequestState.TIMEOUT,
     ],
     RequestState.ANIME_MATCHING: [RequestState.AVAILABLE, RequestState.FAILED],
-    RequestState.AVAILABLE: [],  # Terminal state
-    RequestState.FAILED: [RequestState.REQUESTED],  # Can retry
-    RequestState.TIMEOUT: [RequestState.REQUESTED],  # Can retry
+    RequestState.AVAILABLE: [RequestState.FAILED],  # Can fail after available (manual override)
+    RequestState.FAILED: [RequestState.APPROVED],  # Can retry from APPROVED
+    RequestState.TIMEOUT: [RequestState.APPROVED],  # Can retry from APPROVED
 }
 
 
@@ -52,7 +52,7 @@ class StateMachine:
 
     Usage:
         sm = StateMachine()
-        await sm.transition(request, RequestState.INDEXED, db, ...)
+        await sm.transition(request, RequestState.GRABBING, db, ...)
     """
 
     def __init__(self):

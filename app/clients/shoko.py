@@ -164,6 +164,12 @@ class ShokoClient:
         self._client.on("file:deleted", self._handle_file_deleted)
         self._client.on("file:relocated", self._handle_file_relocated)
 
+        # Additional Shoko events for visibility/debugging
+        self._client.on("ShokoEvent:FileDetected", self._handle_file_detected)
+        self._client.on("ShokoEvent:FileHashed", self._handle_file_hashed)
+        self._client.on("ShokoEvent:SeriesUpdated", self._handle_series_updated)
+        self._client.on("ShokoEvent:OnConnected", self._handle_shoko_connected)
+
         # Connect and run - this blocks until connection closes or errors
         # State is set to CONNECTED via the on_open callback
         await self._client.run()
@@ -217,7 +223,28 @@ class ShokoClient:
             # Legacy format passes data as positional args
             if args:
                 data = args[0] if isinstance(args[0], dict) else {"raw": args}
-                event = self._parse_file_event(data, "matched")
+                # Debug: log raw payload to understand Shoko's event structure
+                logger.debug(f"Legacy FileMatched raw data: {data}")
+
+                # Shoko 4.x may nest file info under FileInfo key
+                file_info = data.get("FileInfo", data)
+                event = self._parse_file_event(file_info, "matched")
+
+                # Also check top-level data for cross-refs if not in file_info
+                if not event.has_cross_references:
+                    event.has_cross_references = data.get("HasCrossReferences", data.get("hasCrossReferences", False))
+
+                # If path is still empty, try alternative field names
+                if not event.relative_path:
+                    event.relative_path = (
+                        data.get("FileName", "") or
+                        data.get("filename", "") or
+                        file_info.get("FileName", "") or
+                        file_info.get("filename", "")
+                    )
+                    if event.relative_path:
+                        logger.debug(f"Used fallback field for path: {event.relative_path}")
+
                 await self._dispatch_file_matched(event)
         except Exception as e:
             logger.error(f"Error handling legacy file matched event: {e}")
@@ -273,6 +300,69 @@ class ShokoClient:
         logger.debug(f"File relocated event: {args}")
         # Not used for status tracking currently
 
+    async def _handle_file_detected(self, *args) -> None:
+        """Handle ShokoEvent:FileDetected events.
+
+        Fired when Shoko detects a new file in a watch folder.
+        Could be used as early signal that import is starting.
+        """
+        try:
+            if args:
+                data = args[0] if isinstance(args[0], dict) else {"raw": args}
+                file_info = data.get("FileInfo", data)
+                relative_path = (
+                    file_info.get("RelativePath", "") or
+                    file_info.get("relativePath", "") or
+                    data.get("FileName", "") or
+                    data.get("filename", "")
+                )
+                logger.info(f"Shoko file detected: {relative_path or '(no path)'}")
+                logger.debug(f"FileDetected raw data: {data}")
+        except Exception as e:
+            logger.error(f"Error handling file detected event: {e}")
+
+    async def _handle_file_hashed(self, *args) -> None:
+        """Handle ShokoEvent:FileHashed events.
+
+        Fired when Shoko finishes hashing a file. Indicates processing progress.
+        """
+        try:
+            if args:
+                data = args[0] if isinstance(args[0], dict) else {"raw": args}
+                file_info = data.get("FileInfo", data)
+                relative_path = (
+                    file_info.get("RelativePath", "") or
+                    file_info.get("relativePath", "") or
+                    data.get("FileName", "")
+                )
+                logger.debug(f"Shoko file hashed: {relative_path or '(no path)'}")
+        except Exception as e:
+            logger.error(f"Error handling file hashed event: {e}")
+
+    async def _handle_series_updated(self, *args) -> None:
+        """Handle ShokoEvent:SeriesUpdated events.
+
+        Fired when series metadata is updated. Could trigger verification.
+        """
+        try:
+            if args:
+                data = args[0] if isinstance(args[0], dict) else {"raw": args}
+                series_id = data.get("SeriesId", data.get("seriesId", data.get("AnimeID", "unknown")))
+                series_name = data.get("SeriesName", data.get("seriesName", ""))
+                logger.info(f"Shoko series updated: {series_name or series_id}")
+                logger.debug(f"SeriesUpdated raw data: {data}")
+        except Exception as e:
+            logger.error(f"Error handling series updated event: {e}")
+
+    async def _handle_shoko_connected(self, *args) -> None:
+        """Handle ShokoEvent:OnConnected events.
+
+        Initial handshake event when SignalR connection is established.
+        """
+        logger.info("Shoko SignalR handshake received (OnConnected)")
+        if args:
+            logger.debug(f"OnConnected data: {args}")
+
     def _parse_file_event(self, data: dict, event_type: str) -> FileEvent:
         """Parse raw SignalR data into FileEvent."""
         return FileEvent(
@@ -285,10 +375,16 @@ class ShokoClient:
 
     async def _dispatch_file_matched(self, event: FileEvent) -> None:
         """Dispatch file matched event to all registered callbacks."""
-        logger.info(
-            f"Shoko file matched: {event.relative_path} "
-            f"(cross-refs: {event.has_cross_references})"
-        )
+        if event.relative_path:
+            logger.info(
+                f"Shoko file matched: {event.relative_path} "
+                f"(cross-refs: {event.has_cross_references})"
+            )
+        else:
+            logger.warning(
+                f"Shoko file matched with EMPTY path (file_id: {event.file_id}, "
+                f"cross-refs: {event.has_cross_references}) - check debug logs for raw payload"
+            )
 
         for callback in self._file_matched_callbacks:
             try:

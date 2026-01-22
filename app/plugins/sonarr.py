@@ -11,16 +11,24 @@ Webhook setup in Sonarr:
   URL: http://status-tracker:8000/hooks/sonarr
   Method: POST
   Events: On Grab, On Import, On Series Delete, On Episode File Delete
+
+Episode Tracking:
+- On Grab: Creates Episode rows for each episode in the download
+- On Import: Updates Episode rows with final_path and transitions state
+- Season packs: All episodes share the same qbit_hash, one import webhook
 """
 
 import logging
 from typing import TYPE_CHECKING, Optional
 
+from sqlalchemy import select
+
 from app.core.plugin_base import ServicePlugin
 from app.core.correlator import correlator
 from app.core.state_machine import state_machine
-from app.models import MediaRequest, RequestState, DeletionSource
+from app.models import MediaRequest, RequestState, DeletionSource, Episode, EpisodeState
 from app.config import settings
+from app.services.state_calculator import calculate_aggregate_state
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +49,7 @@ class SonarrPlugin(ServicePlugin):
 
     @property
     def states_provided(self) -> list[RequestState]:
-        return [RequestState.INDEXED, RequestState.IMPORTING]
+        return [RequestState.GRABBING, RequestState.IMPORTING]
 
     @property
     def correlation_fields(self) -> list[str]:
@@ -145,11 +153,15 @@ class SonarrPlugin(ServicePlugin):
     async def _handle_grab(
         self, request: MediaRequest, payload: dict, db: "AsyncSession"
     ) -> MediaRequest:
-        """Handle Grab event - series found on indexer."""
+        """Handle Grab event - series found on indexer.
+
+        Creates Episode rows for each episode in the download.
+        All episodes in a season pack share the same qbit_hash.
+        """
         series = payload.get("series", {})
         release = payload.get("release", {})
-        episodes = payload.get("episodes", [{}])
-        episode_info = episodes[0] if episodes else {}
+        episodes_data = payload.get("episodes", [])
+        download_id = payload.get("downloadId")
 
         # Store the Sonarr series ID for deletion sync
         sonarr_id = series.get("id")
@@ -157,9 +169,18 @@ class SonarrPlugin(ServicePlugin):
             request.sonarr_id = sonarr_id
 
         # Store the qBittorrent hash for later correlation
-        download_id = payload.get("downloadId")
         if download_id:
             request.qbit_hash = download_id
+
+        # Store IMDB ID from series
+        imdb_id = series.get("imdbId")
+        if imdb_id:
+            request.imdb_id = imdb_id
+
+        # Detect is_anime from series type
+        # Sonarr uses "seriesType" in webhooks, but may also use "type" in some contexts
+        series_type = series.get("seriesType") or series.get("type", "")
+        request.is_anime = series_type.lower() == "anime"
 
         # Store quality and indexer info
         quality = release.get("quality") or release.get("qualityName", "Unknown")
@@ -167,21 +188,44 @@ class SonarrPlugin(ServicePlugin):
         request.quality = quality
         request.indexer = indexer
 
-        # Store season/episode info
-        if episode_info:
-            request.season = episode_info.get("seasonNumber")
-            request.episode = episode_info.get("episodeNumber")
+        # Store release info
+        request.file_size = release.get("size")
+        request.release_group = release.get("releaseGroup")
+
+        # CREATE EPISODE ROWS from webhook data (no API call needed!)
+        for ep_data in episodes_data:
+            episode = Episode(
+                request_id=request.id,
+                season_number=ep_data.get("seasonNumber"),
+                episode_number=ep_data.get("episodeNumber"),
+                episode_title=ep_data.get("title"),
+                sonarr_episode_id=ep_data.get("id"),
+                episode_tvdb_id=ep_data.get("tvdbId"),
+                qbit_hash=download_id,  # All share same hash for season pack
+                state=EpisodeState.GRABBING,
+            )
+            db.add(episode)
+
+        request.total_episodes = len(episodes_data)
+
+        # Store season info from first episode (for display)
+        if episodes_data:
+            first_ep = episodes_data[0]
+            request.season = first_ep.get("seasonNumber")
 
         # Build human-readable details
         details = f"{quality}"
         if indexer:
             details += f" from {indexer}"
-        if episode_info.get("seasonNumber") is not None:
-            details += f" (S{episode_info.get('seasonNumber', 0):02d}E{episode_info.get('episodeNumber', 0):02d})"
+        if len(episodes_data) == 1:
+            ep = episodes_data[0]
+            details += f" (S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d})"
+        elif len(episodes_data) > 1:
+            details += f" ({len(episodes_data)} episodes)"
 
         await state_machine.transition(
             request,
-            RequestState.INDEXED,
+            RequestState.GRABBING,
             db,
             service=self.name,
             event_type="Grab",
@@ -191,40 +235,93 @@ class SonarrPlugin(ServicePlugin):
 
         logger.info(
             f"Sonarr grab: {request.title} - {quality} "
-            f"(hash: {download_id[:8] if download_id else 'N/A'}...)"
+            f"({len(episodes_data)} episodes, hash: {download_id[:8] if download_id else 'N/A'}..., "
+            f"is_anime={request.is_anime})"
         )
         return request
 
     async def _handle_download(
         self, request: MediaRequest, payload: dict, db: "AsyncSession"
     ) -> MediaRequest:
-        """Handle Download (Import) event - file imported to library."""
+        """Handle Download (Import) event - file imported to library.
+
+        Handles both:
+        - Season pack: episodeFiles[] (plural) - ONE webhook for all
+        - Single episode: episodeFile (singular) - one webhook per episode
+        """
         series = payload.get("series", {})
-        episode_file = payload.get("episodeFile", {})
+        episodes_data = payload.get("episodes", [])
+
+        # Season pack: episodeFiles[] (plural)
+        # Single episode: episodeFile (singular)
+        episode_files = payload.get("episodeFiles", [])
+        if not episode_files:
+            single = payload.get("episodeFile")
+            if single:
+                episode_files = [single]
 
         # Store the Sonarr series ID if not already set (redundancy)
         sonarr_id = series.get("id")
         if sonarr_id and not request.sonarr_id:
             request.sonarr_id = sonarr_id
 
-        # Store file path for Shoko/Jellyfin correlation
-        file_path = episode_file.get("path", "")
-        if file_path:
-            request.final_path = file_path
+        # Update request final_path to series/season folder
+        destination_path = payload.get("destinationPath") or series.get("path")
+        if destination_path:
+            request.final_path = destination_path
 
-        # Update quality if not already set
-        if not request.quality:
-            request.quality = episode_file.get("quality", "")
+        # Detect is_anime from path if not already set (fallback detection)
+        if request.is_anime is None:
+            request.is_anime = "/anime/" in (destination_path or "").lower()
 
-        details = "Imported to library"
-        if file_path:
-            # Show just the filename for readability
-            filename = file_path.split("/")[-1] if "/" in file_path else file_path
+        # Determine target state based on anime flag
+        target_episode_state = EpisodeState.ANIME_MATCHING if request.is_anime else EpisodeState.IMPORTING
+
+        # Match episodes to files and update their state
+        updated_count = 0
+        for i, ep_data in enumerate(episodes_data):
+            season_num = ep_data.get("seasonNumber")
+            episode_num = ep_data.get("episodeNumber")
+
+            # Find the Episode row
+            stmt = select(Episode).where(
+                Episode.request_id == request.id,
+                Episode.season_number == season_num,
+                Episode.episode_number == episode_num,
+            )
+            result = await db.execute(stmt)
+            episode = result.scalar_one_or_none()
+
+            if episode and i < len(episode_files):
+                episode.final_path = episode_files[i].get("path")
+                episode.state = target_episode_state
+                updated_count += 1
+            elif episode:
+                # No file for this episode yet (partial import)
+                episode.state = target_episode_state
+
+        # Recalculate aggregate state from episodes
+        # Need to reload episodes for aggregation
+        from sqlalchemy.orm import selectinload
+        stmt = select(MediaRequest).where(MediaRequest.id == request.id).options(
+            selectinload(MediaRequest.episodes)
+        )
+        result = await db.execute(stmt)
+        request = result.scalar_one()
+
+        # Calculate aggregate state
+        new_state = calculate_aggregate_state(request)
+
+        # Build details
+        if len(episode_files) == 1:
+            filename = episode_files[0].get("relativePath", "").split("/")[-1]
             details = f"Imported: {filename}"
+        else:
+            details = f"Imported {len(episode_files)} episodes"
 
         await state_machine.transition(
             request,
-            RequestState.IMPORTING,
+            new_state,
             db,
             service=self.name,
             event_type="Import",
@@ -232,7 +329,10 @@ class SonarrPlugin(ServicePlugin):
             raw_data=payload,
         )
 
-        logger.info(f"Sonarr import: {request.title}")
+        logger.info(
+            f"Sonarr import: {request.title} - {updated_count} episodes updated "
+            f"({new_state.value})"
+        )
         return request
 
     async def _handle_series_delete(

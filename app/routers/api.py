@@ -19,7 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import MediaRequest, RequestState, DeletionLog, DeletionSource
+from app.models import MediaRequest, RequestState, DeletionLog, DeletionSource, Episode
 from app.plugins import get_all_plugins
 from app.core.state_machine import state_machine
 from app.core.broadcaster import broadcaster
@@ -28,6 +28,7 @@ from app.schemas import (
     MediaRequestResponse,
     MediaRequestDetailResponse,
     RequestListResponse,
+    EpisodeResponse,
     DeleteRequestPayload,
     BulkDeleteRequestPayload,
     DeletionLogResponse,
@@ -145,15 +146,15 @@ async def list_active_requests(db: AsyncSession = Depends(get_db)):
     """
     List all active (non-terminal) requests.
 
-    Active states: REQUESTED, APPROVED, INDEXED, DOWNLOADING,
-                   DOWNLOAD_DONE, IMPORTING, ANIME_MATCHING
+    Active states: REQUESTED, APPROVED, GRABBING, DOWNLOADING,
+                   DOWNLOADED, IMPORTING, ANIME_MATCHING
     """
     active_states = [
         RequestState.REQUESTED,
         RequestState.APPROVED,
-        RequestState.INDEXED,
+        RequestState.GRABBING,
         RequestState.DOWNLOADING,
-        RequestState.DOWNLOAD_DONE,
+        RequestState.DOWNLOADED,
         RequestState.IMPORTING,
         RequestState.ANIME_MATCHING,
     ]
@@ -193,6 +194,38 @@ async def get_request(
         raise HTTPException(status_code=404, detail="Request not found")
 
     return MediaRequestDetailResponse.model_validate(request)
+
+
+@router.get("/requests/{request_id}/episodes", response_model=list[EpisodeResponse])
+async def get_request_episodes(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get all episodes for a TV series request.
+
+    Returns empty list for movies or requests without episodes.
+    Returns 404 if request not found.
+    """
+    # First verify the request exists
+    request_stmt = select(MediaRequest).where(MediaRequest.id == request_id)
+    request_result = await db.execute(request_stmt)
+    request = request_result.scalar_one_or_none()
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    # Get episodes for this request
+    stmt = (
+        select(Episode)
+        .where(Episode.request_id == request_id)
+        .order_by(Episode.season_number, Episode.episode_number)
+    )
+
+    result = await db.execute(stmt)
+    episodes = result.scalars().all()
+
+    return [EpisodeResponse.model_validate(ep) for ep in episodes]
 
 
 @router.get("/stats")

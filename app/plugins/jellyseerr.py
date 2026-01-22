@@ -13,6 +13,7 @@ Webhook setup in Jellyseerr:
 """
 
 import logging
+import re
 from typing import TYPE_CHECKING, Optional
 
 from app.core.plugin_base import ServicePlugin
@@ -24,6 +25,20 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+def parse_year_from_subject(subject: str) -> Optional[int]:
+    """Extract year from title like 'Movie Name (2020)'."""
+    match = re.search(r"\((\d{4})\)$", subject.strip())
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def parse_title_from_subject(subject: str) -> str:
+    """Extract title without year from 'Movie Name (2020)'."""
+    # Remove trailing (YYYY) if present
+    return re.sub(r"\s*\(\d{4}\)$", "", subject.strip())
 
 
 class JellyseerrPlugin(ServicePlugin):
@@ -157,17 +172,38 @@ class JellyseerrPlugin(ServicePlugin):
         """Create a new MediaRequest from Jellyseerr webhook."""
         media = payload.get("media", {})
         request_info = payload.get("request", {})
+        extra = payload.get("extra", [])
 
         # Determine media type
         media_type_str = media.get("media_type", "movie")
         media_type = MediaType.TV if media_type_str == "tv" else MediaType.MOVIE
 
-        # Extract poster URL from extra data if available
-        poster_url = None
-        extra = payload.get("extra", [])
+        # Extract poster URL - it's at top level as "image"
+        poster_url = payload.get("image")
+
+        # Extract overview from "message"
+        overview = payload.get("message")
+
+        # Parse year from subject like "Movie Name (2020)"
+        subject = payload.get("subject", "Unknown Title")
+        year = parse_year_from_subject(subject)
+        title = parse_title_from_subject(subject) if year else subject
+
+        # Parse IDs - they come as strings from Jellyseerr
+        tmdb_id_str = media.get("tmdbId", "")
+        tvdb_id_str = media.get("tvdbId", "")
+        tmdb_id = int(tmdb_id_str) if tmdb_id_str and tmdb_id_str.isdigit() else None
+        tvdb_id = int(tvdb_id_str) if tvdb_id_str and tvdb_id_str.isdigit() else None
+
+        # Parse jellyseerr_id - also comes as string
+        jellyseerr_id_str = request_info.get("request_id", "")
+        jellyseerr_id = int(jellyseerr_id_str) if jellyseerr_id_str and str(jellyseerr_id_str).isdigit() else None
+
+        # Extract requested seasons for TV (from extra array)
+        requested_seasons = None
         for item in extra:
-            if item.get("name") == "Poster 500x750":
-                poster_url = item.get("value")
+            if item.get("name") == "Requested Seasons":
+                requested_seasons = item.get("value")
                 break
 
         # Set initial state based on auto-approval
@@ -175,14 +211,17 @@ class JellyseerrPlugin(ServicePlugin):
 
         # Create the request
         request = MediaRequest(
-            title=payload.get("subject", "Unknown Title"),
+            title=title,
             media_type=media_type,
             state=initial_state,
-            jellyseerr_id=request_info.get("request_id"),
-            tmdb_id=media.get("tmdbId"),
-            tvdb_id=media.get("tvdbId"),
+            jellyseerr_id=jellyseerr_id,
+            tmdb_id=tmdb_id,
+            tvdb_id=tvdb_id,
             requested_by=request_info.get("requestedBy_username"),
             poster_url=poster_url,
+            year=year,
+            overview=overview,
+            requested_seasons=requested_seasons,
         )
 
         db.add(request)
@@ -204,6 +243,10 @@ class JellyseerrPlugin(ServicePlugin):
         )
 
         logger.info(f"Created new request: {request.title} (ID: {request.id}, auto_approved={auto_approved})")
+
+        # Mark as new for SSE broadcast (transient flag, not stored in DB)
+        request._is_new = True
+
         return request
 
     def get_timeline_details(self, event_data: dict) -> str:
