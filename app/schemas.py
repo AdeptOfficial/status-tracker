@@ -82,12 +82,8 @@ class MediaRequestResponse(BaseModel):
         from_attributes = True
 
 
-class MediaRequestDetailResponse(MediaRequestResponse):
-    """Media request with full timeline."""
-
-    timeline_events: list[TimelineEventResponse] = []
-
-
+# Forward reference for EpisodeResponse (defined below)
+# This allows MediaRequestResponse to reference it before it's defined
 class EpisodeResponse(BaseModel):
     """Single episode for API response."""
 
@@ -122,10 +118,40 @@ class EpisodeResponse(BaseModel):
         from_attributes = True
 
 
+# Extended response that includes episodes (for TV shows)
+class MediaRequestWithEpisodesResponse(MediaRequestResponse):
+    """Media request with per-episode tracking (for TV shows)."""
+
+    episodes: list[EpisodeResponse] = []
+
+    @property
+    def episode_summary(self) -> dict:
+        """Get episode state summary for quick display."""
+        if not self.episodes:
+            return {"total": 0, "available": 0, "downloading": 0, "pending": 0}
+
+        available = sum(1 for e in self.episodes if e.state == EpisodeState.AVAILABLE)
+        downloading = sum(1 for e in self.episodes if e.state == EpisodeState.DOWNLOADING)
+        pending = sum(1 for e in self.episodes if e.state in [EpisodeState.GRABBING])
+
+        return {
+            "total": len(self.episodes),
+            "available": available,
+            "downloading": downloading,
+            "pending": len(self.episodes) - available - downloading,
+        }
+
+
+class MediaRequestDetailResponse(MediaRequestWithEpisodesResponse):
+    """Media request with full timeline and episodes."""
+
+    timeline_events: list[TimelineEventResponse] = []
+
+
 class RequestListResponse(BaseModel):
     """Paginated list of requests."""
 
-    requests: list[MediaRequestResponse]
+    requests: list[MediaRequestWithEpisodesResponse]
     total: int
     page: int
     per_page: int

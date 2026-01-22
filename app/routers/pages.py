@@ -79,6 +79,7 @@ async def index(
 
     stmt = (
         select(MediaRequest)
+        .options(selectinload(MediaRequest.episodes))
         .where(MediaRequest.state.in_(active_states))
         .order_by(MediaRequest.updated_at.desc())
     )
@@ -192,7 +193,10 @@ async def request_detail(
     """
     stmt = (
         select(MediaRequest)
-        .options(selectinload(MediaRequest.timeline_events))
+        .options(
+            selectinload(MediaRequest.timeline_events),
+            selectinload(MediaRequest.episodes),
+        )
         .where(MediaRequest.id == request_id)
     )
 

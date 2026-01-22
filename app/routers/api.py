@@ -26,6 +26,7 @@ from app.core.broadcaster import broadcaster
 from app.schemas import (
     HealthResponse,
     MediaRequestResponse,
+    MediaRequestWithEpisodesResponse,
     MediaRequestDetailResponse,
     RequestListResponse,
     EpisodeResponse,
@@ -123,9 +124,10 @@ async def list_requests(
     total_result = await db.execute(count_stmt)
     total = total_result.scalar() or 0
 
-    # Get paginated results
+    # Get paginated results with eager-loaded episodes
     stmt = (
-        stmt.order_by(MediaRequest.updated_at.desc())
+        stmt.options(selectinload(MediaRequest.episodes))
+        .order_by(MediaRequest.updated_at.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
@@ -134,7 +136,7 @@ async def list_requests(
     requests = result.scalars().all()
 
     return RequestListResponse(
-        requests=[MediaRequestResponse.model_validate(r) for r in requests],
+        requests=[MediaRequestWithEpisodesResponse.model_validate(r) for r in requests],
         total=total,
         page=page,
         per_page=per_page,
@@ -161,6 +163,7 @@ async def list_active_requests(db: AsyncSession = Depends(get_db)):
 
     stmt = (
         select(MediaRequest)
+        .options(selectinload(MediaRequest.episodes))
         .where(MediaRequest.state.in_(active_states))
         .order_by(MediaRequest.updated_at.desc())
     )
@@ -168,7 +171,7 @@ async def list_active_requests(db: AsyncSession = Depends(get_db)):
     result = await db.execute(stmt)
     requests = result.scalars().all()
 
-    return [MediaRequestResponse.model_validate(r) for r in requests]
+    return [MediaRequestWithEpisodesResponse.model_validate(r) for r in requests]
 
 
 @router.get("/requests/{request_id}", response_model=MediaRequestDetailResponse)
@@ -183,7 +186,10 @@ async def get_request(
     """
     stmt = (
         select(MediaRequest)
-        .options(selectinload(MediaRequest.timeline_events))
+        .options(
+            selectinload(MediaRequest.timeline_events),
+            selectinload(MediaRequest.episodes),
+        )
         .where(MediaRequest.id == request_id)
     )
 

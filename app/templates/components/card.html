@@ -119,6 +119,65 @@
                 {% endif %}
             </div>
 
+            <!-- Episode progress for TV shows -->
+            {% if request.media_type.value == 'tv' and request.episodes %}
+                {% set available_eps = request.episodes|selectattr('state.value', 'equalto', 'available')|list|length %}
+                {% set downloading_eps = request.episodes|selectattr('state.value', 'equalto', 'downloading')|list|length %}
+                {% set total_eps = request.episodes|length %}
+                <div class="mt-3 pt-3 border-t border-gray-700">
+                    <div class="flex items-center justify-between text-xs mb-2">
+                        <span class="text-gray-400">Episodes</span>
+                        <span class="text-gray-300">{{ available_eps }}/{{ total_eps }} ready</span>
+                    </div>
+                    <!-- Episode progress bar -->
+                    <div class="w-full bg-gray-700 rounded-full h-1.5 flex overflow-hidden">
+                        {% if available_eps > 0 %}
+                            <div class="bg-green-500 h-1.5" style="width: {{ (available_eps / total_eps * 100)|round(1) }}%"></div>
+                        {% endif %}
+                        {% if downloading_eps > 0 %}
+                            <div class="bg-cyan-500 h-1.5 animate-pulse" style="width: {{ (downloading_eps / total_eps * 100)|round(1) }}%"></div>
+                        {% endif %}
+                    </div>
+                    <!-- Expand button -->
+                    <details class="mt-2" onclick="event.stopPropagation();">
+                        <summary class="text-xs text-gray-500 hover:text-gray-300 cursor-pointer select-none">
+                            Show episodes
+                        </summary>
+                        <div class="mt-2 max-h-32 overflow-y-auto space-y-1">
+                            {% for ep in request.episodes %}
+                                {% set ep_state_colors = {
+                                    'grabbing': 'text-purple-400',
+                                    'downloading': 'text-cyan-400',
+                                    'downloaded': 'text-teal-400',
+                                    'importing': 'text-orange-400',
+                                    'anime_matching': 'text-pink-400',
+                                    'available': 'text-green-400',
+                                    'failed': 'text-red-400'
+                                } %}
+                                {% set ep_state_icons = {
+                                    'grabbing': '○',
+                                    'downloading': '⬇',
+                                    'downloaded': '●',
+                                    'importing': '↻',
+                                    'anime_matching': '◐',
+                                    'available': '✓',
+                                    'failed': '✗'
+                                } %}
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-gray-400 truncate flex-1">
+                                        S{{ "%02d"|format(ep.season_number) }}E{{ "%02d"|format(ep.episode_number) }}
+                                        {% if ep.episode_title %}<span class="text-gray-500 ml-1">{{ ep.episode_title|truncate(20) }}</span>{% endif %}
+                                    </span>
+                                    <span class="{{ ep_state_colors.get(ep.state.value, 'text-gray-500') }}">
+                                        {{ ep_state_icons.get(ep.state.value, '?') }}
+                                    </span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </details>
+                </div>
+            {% endif %}
+
             <!-- Retry button for failed/timeout (on history page) -->
             {% if request.state.value in ['failed', 'timeout'] %}
                 <button hx-post="/api/requests/{{ request.id }}/retry"
