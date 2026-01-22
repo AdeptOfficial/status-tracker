@@ -74,8 +74,9 @@ class RadarrClient:
                     error_data = response.json()
                     if "message" in error_data:
                         error_msg = error_data["message"]
-                except Exception:
-                    pass
+                except Exception as json_err:
+                    # Log response body for debugging if JSON parse fails
+                    logger.warning(f"Could not parse Radarr error response: {response.text[:200]}")
                 logger.error(f"Failed to delete Radarr movie {movie_id}: {error_msg}")
                 return False, error_msg
 

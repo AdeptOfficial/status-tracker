@@ -203,6 +203,7 @@ class DeletionLog(Base):
     radarr_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     shoko_series_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     jellyseerr_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    qbit_hash: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     poster_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 

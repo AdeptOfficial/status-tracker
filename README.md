@@ -17,7 +17,7 @@ Request → Indexed → Downloading → Importing → [Anime Matching] → Avail
 - **Technical docs:** `docs/`
 - **Development log:** `DIARY.md`
 
-## Current Status (2026-01-21)
+## Current Status (2026-01-22)
 
 ### What Works
 | Flow | Status | Notes |
@@ -26,15 +26,16 @@ Request → Indexed → Downloading → Importing → [Anime Matching] → Avail
 | Regular TV Shows | ✅ Working | Full flow through Sonarr |
 | Anime Movies | ✅ Working | Via Jellyfin fallback checker (polls every 30s) |
 | Anime TV Shows | ❌ Broken | Stuck at IMPORTING - needs fallback checker extension |
-| Deletion Sync | ⚠️ Partial | Works but has gaps (see Known Issues) |
+| Deletion Sync | ✅ Working | Radarr, Sonarr, Shoko, Jellyfin confirmed |
+| Jellyseerr Sync | ⚠️ Partial | Deletion works but ID resolution often fails |
 | Library Sync | ⚠️ Partial | Adds new items but doesn't update missing IDs |
 
-### Known Issues (26 tracked)
+### Known Issues
 
 **High Priority:**
 - Anime TV shows stuck at IMPORTING state (`issues/design-separate-anime-movie-show-flows.md`)
 - Library sync doesn't populate missing service IDs (`issues/library-sync-missing-ids.md`)
-- Deletion sync has gaps with Shoko/Jellyseerr (`issues/deletion-integration-gaps.md`)
+- Jellyseerr ID not captured on request creation (shows "not_needed" on deletion)
 
 **Medium Priority:**
 - Detail page SSE not updating download progress (`issues/detail-page-live-updates-bug.md`)
@@ -113,14 +114,16 @@ app/
 | Part | Description | Status |
 |------|-------------|--------|
 | 1 | DeletionLog + DeletionSyncEvent models | ✅ Complete |
-| 2 | Service API Clients | ✅ Complete |
+| 2 | Service API Clients (Radarr, Sonarr, Shoko, Jellyfin) | ✅ Complete |
 | 3 | Auth Middleware (Jellyfin tokens) | ✅ Complete |
 | 4 | Deletion Orchestrator | ✅ Complete |
 | 5 | Delete API Endpoints | ✅ Complete |
 | 6 | Dashboard Delete Button | ✅ Complete |
 | 7 | History Bulk Delete | ✅ Complete |
-| 8 | External Deletion Webhooks | ⚠️ Has gaps |
-| 9 | Deletion Logs Page | ✅ Complete |
+| 8 | Shoko RemoveMissingFiles API | ✅ Complete |
+| 9 | Jellyseerr Library Sync Trigger | ✅ Complete |
+| 10 | Jellyseerr ID Resolution | ⚠️ Often fails (ID not stored on request) |
+| 11 | Deletion Logs Page | ✅ Complete |
 
 ### Library Sync Feature
 | Part | Description | Status |

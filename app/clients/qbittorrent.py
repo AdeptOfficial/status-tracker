@@ -177,6 +177,63 @@ class QBittorrentClient:
         torrents = await self.get_torrents(hashes=[hash])
         return torrents[0] if torrents else None
 
+    async def delete_torrent(
+        self,
+        hash: str,
+        delete_files: bool = True,
+    ) -> tuple[bool, str]:
+        """
+        Delete a torrent from qBittorrent.
+
+        Args:
+            hash: Torrent hash to delete
+            delete_files: If True, also delete downloaded files from disk
+
+        Returns:
+            Tuple of (success, message)
+        """
+        if not self._authenticated:
+            if not await self.login():
+                return False, "Failed to authenticate with qBittorrent"
+
+        try:
+            client = await self._get_client()
+
+            # First check if torrent exists
+            existing = await self.get_torrent(hash)
+            if not existing:
+                logger.info(f"Torrent {hash[:8]}... not found in qBittorrent (already removed?)")
+                return True, "Torrent not found (already removed)"
+
+            # Delete the torrent
+            response = await client.post(
+                "/api/v2/torrents/delete",
+                data={
+                    "hashes": hash,
+                    "deleteFiles": "true" if delete_files else "false",
+                },
+            )
+
+            if response.status_code == 200:
+                logger.info(
+                    f"Deleted torrent {hash[:8]}... from qBittorrent "
+                    f"(deleteFiles={delete_files})"
+                )
+                return True, f"Torrent deleted successfully (files {'deleted' if delete_files else 'kept'})"
+            else:
+                error_msg = f"Delete failed with status {response.status_code}"
+                logger.error(f"Failed to delete torrent {hash[:8]}...: {error_msg}")
+                return False, error_msg
+
+        except httpx.RequestError as e:
+            error_msg = f"Request error: {e}"
+            logger.error(f"Request error deleting torrent: {e}")
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Unexpected error: {e}"
+            logger.error(f"Unexpected error deleting torrent: {e}")
+            return False, error_msg
+
     async def is_healthy(self) -> bool:
         """Check if qBittorrent is reachable and authenticated."""
         try:

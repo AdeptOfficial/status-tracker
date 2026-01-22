@@ -88,6 +88,47 @@ class JellyseerrClient:
             logger.error(f"Unexpected error deleting Jellyseerr request: {e}")
             return False, error_msg
 
+    async def trigger_library_sync(self) -> bool:
+        """
+        Trigger Jellyseerr to resync library availability from Jellyfin.
+
+        Jellyseerr caches which items are "available" in Jellyfin. After
+        deleting media, this cache becomes stale and shows items as still
+        available. This method triggers a resync to update the cache.
+
+        The sync runs asynchronously in Jellyseerr - UI shows "syncing".
+
+        Returns:
+            True if sync was triggered successfully
+        """
+        try:
+            client = await self._get_client()
+            # Trigger full library scan/sync
+            # This endpoint works for both Plex and Jellyfin backends
+            response = await client.post("/api/v1/settings/jobs/run", json={"job": "jellyfin-full-sync"})
+
+            if response.status_code in (200, 204):
+                logger.info("Triggered Jellyseerr library sync")
+                return True
+            elif response.status_code == 404:
+                # Try alternative endpoint for older versions
+                response = await client.post("/api/v1/settings/jellyfin/sync")
+                if response.status_code in (200, 204):
+                    logger.info("Triggered Jellyseerr library sync (legacy endpoint)")
+                    return True
+                logger.warning(f"Jellyseerr library sync endpoint not found")
+                return False
+            else:
+                logger.warning(f"Jellyseerr library sync returned {response.status_code}")
+                return False
+
+        except httpx.RequestError as e:
+            logger.warning(f"Could not trigger Jellyseerr sync: {e}")
+            return False
+        except Exception as e:
+            logger.warning(f"Jellyseerr sync trigger error: {e}")
+            return False
+
     async def get_request(self, request_id: int) -> Optional[dict]:
         """
         Get request by ID (for verification).
