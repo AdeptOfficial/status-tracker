@@ -44,6 +44,9 @@ MAX_RETRIES = 3             # Number of retry attempts
 # Fallback check threshold - requests stuck longer than this get checked
 STUCK_THRESHOLD_MINUTES = 5
 
+# VFS regeneration delay - time to wait after library scan for Shokofin VFS to regenerate
+VFS_REGENERATION_DELAY = 10  # seconds (increased from 3s for reliability)
+
 
 def is_playable(item: dict) -> bool:
     """Check if Jellyfin item is actually playable (not metadata-only).
@@ -448,8 +451,9 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
             f"({len(anime_matching_requests)} ANIME_MATCHING, {len(importing_requests)} IMPORTING)"
         )
         await jellyfin_client.trigger_library_scan()
-        # Brief delay to let Jellyfin/Shokofin process the scan
-        await asyncio.sleep(3)
+        # Wait for Shokofin VFS regeneration - 3s was too short, increased for reliability
+        logger.debug(f"[FALLBACK] Waiting {VFS_REGENERATION_DELAY}s for VFS regeneration...")
+        await asyncio.sleep(VFS_REGENERATION_DELAY)
 
     for request in stuck_requests:
         try:
