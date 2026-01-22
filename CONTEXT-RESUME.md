@@ -1,134 +1,144 @@
-# Status Tracker Workflow Implementation - Context Resume
+# Status Tracker - Context Resume Prompt
 
-**Last Updated:** 2026-01-22
-**Status:** All 5 phases complete, 87 tests passing
+**Last Updated:** 2026-01-22 (SSE Fix + VFS Refresh Session)
+**Branch:** `fix/media-workflow-audit`
 
-## Project Overview
+---
 
-This is a **media request lifecycle tracker** for the pipeline:
+## COPY EVERYTHING BELOW TO RESUME SESSION
+
+---
+
+I'm continuing work on the **status-tracker** app. Read these files for context:
+
+1. `/home/adept/git/status-tracker-workflow-fix/docs/flows/SESSION-HANDOFF-2026-01-22-SSE-FIX.md`
+2. `/home/adept/git/status-tracker-workflow-fix/DIARY.md`
+3. `/home/adept/git/status-tracker-workflow-fix/docs/MVP.md`
+
+**Working directories:**
+- App code: `/home/adept/git/status-tracker-workflow-fix/`
+- Homeserver docs: `/home/adept/git/homeserver/`
+
+---
+
+## Current Session Summary
+
+### Completed This Session ✅
+
+1. **Fixed SSE Live Updates** - Renamed `sse:refresh` → `status-update` (htmx reserved prefix conflict)
+   - Files: `app/templates/index.html`, `app/templates/detail.html`
+
+2. **Added Diagnostic Logging** - Broadcast tracking for debugging
+   - Files: `app/core/broadcaster.py`, `app/routers/sse.py`
+
+3. **Enhanced Fallback Checker** - Now triggers Jellyfin library scan for `ANIME_MATCHING` requests to force Shokofin VFS regeneration
+   - File: `app/services/jellyfin_verifier.py`
+   - Tested successfully with "Rascal Does Not Dream of a Dreaming Girl"
+
+4. **Created Issue** - IMPORTING state skipped for anime
+   - File: `docs/issues/2026-01-22-importing-state-skipped-for-anime.md`
+
+### NOT YET DONE ❌
+
+1. **Commit changes** - All above changes are uncommitted!
+   ```bash
+   cd /home/adept/git/status-tracker-workflow-fix
+   git add -A && git commit -m "Add VFS refresh to fallback checker, diagnostic logging" && git push
+   ```
+
+2. **Per-episode monitoring gap** - Episodes ARE created in DB but NOT displayed:
+   - `Episode` model exists (`app/models.py:299`)
+   - Episodes created on Sonarr grab (`app/plugins/sonarr.py`)
+   - `EpisodeResponse` schema exists (`app/schemas.py:91`)
+   - **MISSING:** `episodes` field not in `MediaRequestResponse` schema
+   - **MISSING:** UI doesn't show per-episode progress
+   - Issue file: `issues/per-episode-download-tracking.md`
+
+3. **Test Lycoris Recoil** - TV anime currently at `approved` state
+
+---
+
+## Key Architecture
+
+### Media Flow
 ```
 Jellyseerr → Radarr/Sonarr → qBittorrent → Shoko (anime) → Jellyfin
 ```
 
-### Problem Being Solved
-- Requests were getting stuck (Lycoris Recoil at "Importing", Violet Evergarden at "Matching")
-- No per-episode tracking for TV shows
-- Correlation bugs causing old requests to match new webhooks
-
-## Implementation Status
-
-### Completed Phases
-
-| Phase | Description | Tests |
-|-------|-------------|-------|
-| 0 | Test Infrastructure (pytest, fixtures, mocks) | 15 |
-| 1 | Database Schema (Episode table, state renames) | - |
-| 2 | Regular Movie Flow | 21 |
-| 3 | Regular TV Flow + Adaptive Polling | 20 |
-| 4 | Anime Movie Flow | 17 |
-| 5 | Anime TV Flow | 14 |
-
-**Total: 87 tests passing**
-
-### The 4 Media Flows
-
-1. **Regular Movie:** APPROVED → GRABBING → DOWNLOADING → DOWNLOADED → IMPORTING → AVAILABLE
-2. **Regular TV:** Same flow with per-episode tracking via Episode table
-3. **Anime Movie:** ... → ANIME_MATCHING → (Jellyfin multi-type fallback) → AVAILABLE
-4. **Anime TV:** Episodes individually matched by Shoko → AVAILABLE, request state aggregated
-
-## Key Files Modified/Created
-
-### Core Logic
-- `app/plugins/shoko.py` - Major rewrite for movie vs TV handling, Jellyfin verification trigger
-- `app/plugins/sonarr.py` - Episode creation on Grab, season pack Import handling
-- `app/plugins/radarr.py` - is_anime detection, new field extraction
-- `app/plugins/qbittorrent.py` - Adaptive polling (5s active, 30s idle)
-- `app/plugins/jellyseerr.py` - Fixed poster URL, overview, year parsing
-- `app/core/state_machine.py` - Added IMPORTING → ANIME_MATCHING transition
-- `app/services/state_calculator.py` - Created for TV state aggregation
-- `app/services/jellyfin_verifier.py` - Unified verification router, multi-type fallback
-
-### Tests
-- `tests/conftest.py` - DB fixtures, webhook loaders
-- `tests/test_flow_1_regular_movie.py`
-- `tests/test_flow_2_regular_tv.py`
-- `tests/test_flow_3_anime_movie.py`
-- `tests/test_flow_4_anime_tv.py`
-- `tests/test_infrastructure.py`
-
-### Test Fixtures
-- `tests/fixtures/webhooks/` - Symlink to `docs/flows/captured-webhooks/`
-- Captured webhooks: jellyseerr-movie-auto-approved, jellyseerr-tv-auto-approved, radarr-grab, radarr-import, sonarr-grab, sonarr-import
-
-## Field Population Summary
-
-### Movies - All fields populated:
-- Jellyseerr: `jellyseerr_id`, `tmdb_id`, `overview`, `poster_url`, `year`, `title`
-- Radarr Grab: `radarr_id`, `imdb_id`, `qbit_hash`, `is_anime`, `quality`, `indexer`, `file_size`, `release_group`
-- Radarr Import: `final_path`
-- Jellyfin: `jellyfin_id`, `available_at`
-- Shoko (anime): `shoko_series_id`
-
-### TV Shows - All fields populated:
-- Jellyseerr: `jellyseerr_id`, `tvdb_id`, `overview`, `requested_seasons`
-- Sonarr Grab: `sonarr_id`, `imdb_id`, `qbit_hash`, `is_anime`, `total_episodes`
-- Sonarr Import: `final_path`
-- Jellyfin: `jellyfin_id`, `available_at`
-
-### Episodes - One gap:
-- Sonarr Grab: `season_number`, `episode_number`, `episode_title`, `sonarr_episode_id`, `episode_tvdb_id`, `qbit_hash`
-- Sonarr Import: `final_path`
-- Shoko (anime): `shoko_file_id`
-- **GAP:** `jellyfin_id` NOT set (MVP verifies at series level, not per-episode)
-
-## Key Implementation Details
-
-### Adaptive Polling (qBittorrent)
-```python
-POLL_FAST = 5   # seconds when downloads active (GRABBING/DOWNLOADING)
-POLL_SLOW = 30  # seconds when idle
+### States
+```
+REQUESTED → APPROVED → GRABBING → DOWNLOADING → DOWNLOADED → IMPORTING → AVAILABLE
+                                                      ↓ (anime)
+                                               ANIME_MATCHING
+                                                      ↓
+                                                 AVAILABLE
 ```
 
-### State Aggregation (TV Shows)
-- All AVAILABLE → request AVAILABLE
-- Any FAILED → request FAILED
-- Otherwise → highest priority in-progress state
-- Priority: ANIME_MATCHING > IMPORTING > DOWNLOADED > DOWNLOADING > GRABBING
+### Key Files
+| Purpose | File |
+|---------|------|
+| State machine | `app/core/state_machine.py` |
+| Broadcaster | `app/core/broadcaster.py` |
+| Fallback checker | `app/services/jellyfin_verifier.py` |
+| Sonarr plugin | `app/plugins/sonarr.py` |
+| Episode model | `app/models.py:299` |
+| API schemas | `app/schemas.py` |
+| Templates | `app/templates/index.html`, `detail.html` |
 
-### Multi-Type Fallback (Anime Movies)
-Shoko may recategorize anime movies as TV specials. Verification tries:
-1. Movie by TMDB
-2. Series by TMDB
-3. Any type by TMDB
-4. Title search
+---
 
-### Shoko Integration
-- Movies: FileMatched → store shoko_series_id → trigger verify_jellyfin_availability()
-- TV: FileMatched per episode → update episode.shoko_file_id → episode AVAILABLE → recalculate aggregate
-
-## Running Tests
+## Deploy Commands
 
 ```bash
-# All tests
-docker compose run --rm \
-  -v "$(pwd)/tests:/app/tests:ro" \
-  -v "$(pwd)/docs:/app/docs:ro" \
-  status-tracker python -m pytest tests/ -v
+# Sync to dev (ALWAYS exclude .env!)
+rsync -avz --exclude '.env' --exclude '__pycache__' --exclude '.git' \
+  /home/adept/git/status-tracker-workflow-fix/ root@10.0.2.10:/tmp/status-tracker-update/
 
-# Specific flow
-docker compose run --rm \
-  -v "$(pwd)/tests:/app/tests:ro" \
-  -v "$(pwd)/docs:/app/docs:ro" \
-  status-tracker python -m pytest tests/test_flow_3_anime_movie.py -v
+# Copy into LXC 220 (preserves server .env)
+ssh root@10.0.2.10 "cd /tmp/status-tracker-update && tar --exclude='.env' -cf - . | pct exec 220 -- tar -xf - -C /opt/status-tracker/"
+
+# Rebuild container
+ssh root@10.0.2.10 "pct exec 220 -- bash -c 'cd /opt/status-tracker && docker compose up -d --build'"
+
+# Check health
+ssh root@10.0.2.10 "pct exec 220 -- curl -s http://localhost:8100/api/health"
+
+# Tail logs
+ssh root@10.0.2.10 "pct exec 220 -- docker logs status-tracker --tail 50"
 ```
 
-## Known Gaps / Future Work
+---
 
-1. **Episode jellyfin_id** - Not populated (MVP verifies series-level)
-2. **Per-episode Jellyfin verification** - Could add for more granular tracking
-3. **Shoko cross-reference details** - Currently just storing file_id, could extract AniDB IDs
+## Security Protocols (CRITICAL)
 
-## Plan File Location
+- **NEVER** read `.env` files, `config.xml`, `settings.json`
+- **NEVER** run `printenv`, `env`, `docker inspect`, `docker-compose config`
+- **ALWAYS** exclude `.env` when syncing/deploying
+- If credentials appear, **STOP** and notify user
 
-Full implementation plan: `/home/adept/.claude/plans/zazzy-whistling-mochi.md`
+---
+
+## Current Requests on Dev
+
+| ID | Title | State | Type |
+|----|-------|-------|------|
+| 6 | Lycoris Recoil | approved | TV/Anime |
+| 5 | Rascal Does Not Dream... | available | Movie |
+| 4 | Your Name. | available | Movie |
+| 2 | SNAFU | available | TV |
+| 3 | Akira | available | Movie |
+
+---
+
+## Roadmap (from DIARY.md)
+
+| Priority | Task |
+|----------|------|
+| 1 | Fix IMPORTING state skipped for anime |
+| 2 | Test anime TV shows |
+| 3 | Media sync button |
+| 4 | Fix delete integration |
+
+---
+
+Please read the handoff document first, then ask what to work on next.

@@ -10,13 +10,16 @@ Development log for the status-tracker project. New entries at the top.
 
 | Priority | Task | Issue/Notes |
 |----------|------|-------------|
-| 1 | **Test anime TV shows** | Flow may differ from movies. Sonarr handles shows differently. See `issues/design-separate-anime-movie-show-flows.md` |
-| 2 | **Media sync button** | Bulk populate database with existing media IDs from Jellyfin/Radarr/Sonarr. Users need to sync existing library. |
-| 3 | **Fix delete integration** | Multiple gaps in deletion sync. See `issues/deletion-integration-gaps.md` |
+| 1 | **Fix IMPORTING state skipped for anime** | State goes DOWNLOADED → ANIME_MATCHING, skipping IMPORTING. See `docs/issues/2026-01-22-importing-state-skipped-for-anime.md` |
+| 2 | **Test anime TV shows** | Flow may differ from movies. Sonarr handles shows differently. See `issues/design-separate-anime-movie-show-flows.md` |
+| 3 | **Media sync button** | Bulk populate database with existing media IDs from Jellyfin/Radarr/Sonarr. Users need to sync existing library. |
+| 4 | **Fix delete integration** | Multiple gaps in deletion sync. See `issues/deletion-integration-gaps.md` |
 
-**Current working state (2026-01-21):**
+**Current working state (2026-01-22):**
+- ✅ SSE live updates: Working (fixed `sse:refresh` → `status-update`)
 - ✅ Anime movies: Full flow working (REQUESTED → AVAILABLE)
 - ✅ Jellyfin fallback checker: Polls every 30s for stuck requests
+- ⚠️ Anime movies: IMPORTING state skipped (goes directly to ANIME_MATCHING)
 - ❌ Anime TV shows: TESTED - stuck at IMPORTING (needs fallback checker)
 - ⚠️ Deletion sync: Has known bugs
 

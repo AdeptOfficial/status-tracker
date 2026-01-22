@@ -436,13 +436,20 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
 
     transitioned = []
 
-    # Track if we need to trigger a scan (for IMPORTING requests that haven't been scanned)
-    needs_scan = any(r.state == RequestState.IMPORTING for r in stuck_requests)
-    if needs_scan:
+    # Track if we need to trigger a scan to force Shokofin VFS regeneration
+    # IMPORTING: Regular content waiting for Jellyfin to detect
+    # ANIME_MATCHING: Anime content where Shokofin VFS may not have regenerated
+    anime_matching_requests = [r for r in stuck_requests if r.state == RequestState.ANIME_MATCHING]
+    importing_requests = [r for r in stuck_requests if r.state == RequestState.IMPORTING]
+
+    if anime_matching_requests or importing_requests:
         logger.info(
-            "[FALLBACK] Found request(s) in IMPORTING state - triggering Jellyfin scan"
+            f"[FALLBACK] Triggering Jellyfin library scan to force VFS regeneration "
+            f"({len(anime_matching_requests)} ANIME_MATCHING, {len(importing_requests)} IMPORTING)"
         )
         await jellyfin_client.trigger_library_scan()
+        # Brief delay to let Jellyfin/Shokofin process the scan
+        await asyncio.sleep(3)
 
     for request in stuck_requests:
         try:
