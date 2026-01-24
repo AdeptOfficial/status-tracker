@@ -177,3 +177,111 @@ Configure each service to send webhooks to status-tracker:
 | Jellyfin | `http://status-tracker:8000/hooks/jellyfin` | ItemAdded (requires Webhook plugin) |
 
 **Note:** Shoko uses SignalR (configured via `SHOKO_*` env vars), not webhooks.
+
+## API Documentation
+
+FastAPI auto-generates interactive API docs:
+
+| Endpoint | Description |
+|----------|-------------|
+| `/docs` | Swagger UI - interactive API explorer |
+| `/redoc` | ReDoc - alternative API documentation |
+| `/openapi.json` | OpenAPI schema (JSON) |
+
+### Key API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/requests` | List all active requests |
+| `GET` | `/api/requests/{id}` | Get request details + timeline |
+| `GET` | `/api/history` | List completed requests |
+| `GET` | `/api/health` | Health check (service connectivity) |
+| `GET` | `/api/sse` | Server-Sent Events stream |
+| `POST` | `/hooks/{service}` | Webhook receiver (jellyseerr, sonarr, radarr, jellyfin) |
+| `DELETE` | `/api/requests/{id}` | Delete request from all services |
+| `POST` | `/api/requests/bulk-delete` | Bulk delete from history |
+| `POST` | `/api/library-sync` | Trigger Jellyfin library sync |
+
+### Authentication
+
+Most endpoints require a valid Jellyfin token passed via cookie (`jellyfin_token`).
+
+Login at `/login` with your Jellyfin credentials.
+
+## Troubleshooting
+
+### Common Issues
+
+**Container won't start**
+```bash
+docker compose logs status-tracker
+# Check for missing env vars or connection errors
+```
+
+**Webhooks not received**
+```bash
+# Check container is on same network as media services
+docker network inspect media-net
+
+# Test webhook endpoint
+curl -X POST http://localhost:8100/hooks/test -d '{}'
+```
+
+**Requests stuck at IMPORTING**
+- Regular movies/TV: Check Jellyfin webhook plugin is installed and configured
+- Anime movies: Should auto-resolve via fallback checker (30s polling)
+- Anime TV: Known issue - fallback checker doesn't support TV yet
+
+**Database locked error**
+```bash
+# Stop container
+docker compose down
+
+# Check for stale lock
+ls -la data/
+
+# Restart
+docker compose up -d
+```
+
+**SSE not updating**
+- History page: Should work
+- Detail page: Known bug - use manual refresh
+- Check browser console for connection errors
+
+**Deletion fails for specific service**
+```bash
+# Check deletion logs
+curl http://localhost:8100/api/deletion-logs
+
+# Common causes:
+# - Service API key missing/invalid in .env
+# - ID not captured during initial request (shows "not_needed")
+# - Service unreachable (check docker network)
+```
+
+**Health endpoint shows service down**
+```bash
+# Access health dashboard
+curl http://localhost:8100/api/health
+
+# Verify service connectivity from container
+docker exec status-tracker curl http://sonarr:8989/api/v3/system/status
+```
+
+### Debug Mode
+
+Enable verbose logging:
+```bash
+# In .env
+LOG_LEVEL=DEBUG
+
+# Restart
+docker compose up -d --force-recreate
+```
+
+### Getting Help
+
+1. Check `issues/` folder for known issues
+2. Read `DIARY.md` for recent changes and fixes
+3. Check `docs/` for technical deep-dives

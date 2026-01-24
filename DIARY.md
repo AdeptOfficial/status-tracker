@@ -22,6 +22,31 @@ Development log for the status-tracker project. New entries at the top.
 
 ---
 
+## 2026-01-23: README Documentation Updates
+
+### Summary
+
+Added API documentation and troubleshooting sections to README.md to address documentation gaps identified during repo review.
+
+### What Changed
+
+| Section | Content |
+|---------|---------|
+| **API Documentation** | Listed OpenAPI endpoints (`/docs`, `/redoc`), key API endpoints with methods, authentication notes |
+| **Troubleshooting** | Common issues: container startup, webhooks, stuck requests, database locks, SSE, deletion failures, health checks, debug mode |
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `README.md` | Added API Documentation section, added Troubleshooting section |
+
+### Related
+
+- Homeserver repo now has `context/workflows/app-deployment.md` for deploying custom apps
+
+---
+
 ## 2026-01-21: Library Sync - Update Existing Metadata (Phase 2)
 
 ### Summary
