@@ -77,6 +77,7 @@ async def run_migrations(conn):
     migrations = {
         "deletion_logs": {
             "status": ("VARCHAR(20)", "'IN_PROGRESS'"),
+            "is_anime": ("BOOLEAN", "0"),  # For Shoko sync determination
         },
         # Add future migrations here:
         # "requests": {

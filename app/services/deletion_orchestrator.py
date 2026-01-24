@@ -32,6 +32,7 @@ from app.clients.sonarr import sonarr_client
 from app.clients.radarr import radarr_client
 from app.clients.jellyfin import jellyfin_client
 from app.clients.jellyseerr import jellyseerr_client
+from app.clients.shoko import shoko_http_client
 from app.core.broadcaster import broadcaster
 from app.config import settings
 
@@ -236,6 +237,7 @@ class DeletionOrchestrator:
             jellyseerr_id=request.jellyseerr_id,
             poster_url=request.poster_url,
             year=year,
+            is_anime=request.is_anime,  # Store for Shoko sync determination
             source=source,
             deleted_by_user_id=user_id,
             deleted_by_username=resolved_username,
@@ -300,10 +302,11 @@ class DeletionOrchestrator:
                 "has_id": request.radarr_id is not None,
                 "skip": "radarr" in skip_services,
             },
-            # Shoko only for anime (has shoko_series_id)
+            # Shoko for anime content (check is_anime flag, not just shoko_series_id)
+            # Shoko may have entries even without shoko_series_id being tracked
             "shoko": {
-                "applicable": request.shoko_series_id is not None,
-                "has_id": request.shoko_series_id is not None,
+                "applicable": request.is_anime,
+                "has_id": True,  # Shoko uses RemoveMissingFiles scan, doesn't need specific ID
                 "skip": "shoko" in skip_services,
             },
             # Jellyfin always applicable
@@ -384,11 +387,10 @@ class DeletionOrchestrator:
                 success, message = await radarr_client.delete_movie(
                     deletion_log.radarr_id, delete_files=delete_files
                 )
-            elif service == "shoko" and deletion_log.shoko_series_id:
+            elif service == "shoko" and deletion_log.is_anime:
                 if delete_files:
-                    # Shoko detects missing files on scan
-                    success = True
-                    message = "Shoko will detect missing files on next scan"
+                    # Trigger Shoko to scan and remove missing file entries
+                    success, message = await shoko_http_client.remove_missing_files()
                 else:
                     # Files kept on disk - skip Shoko
                     await self._add_sync_event(
@@ -415,10 +417,36 @@ class DeletionOrchestrator:
                     )
                     await self.db.commit()
                     return  # Early return - don't go through normal success/fail flow
-            elif service == "jellyseerr" and deletion_log.jellyseerr_id:
-                success, message = await jellyseerr_client.delete_request(
-                    deletion_log.jellyseerr_id
+            elif service == "jellyseerr":
+                # Jellyseerr has two entities: requests (who asked for it) and media (availability).
+                # We need to delete both to fully clear the "Available" status.
+                messages = []
+
+                # Step 1: Delete the request record (if we have the ID)
+                if deletion_log.jellyseerr_id:
+                    req_success, req_msg = await jellyseerr_client.delete_request(
+                        deletion_log.jellyseerr_id
+                    )
+                    messages.append(f"Request: {req_msg}")
+                else:
+                    req_success = True
+                    messages.append("Request: No ID (skipped)")
+
+                # Step 2: Delete the media entry to clear "Available" status
+                # Look up by TMDB ID since we don't store mediaInfo.id
+                media_type_str = "movie" if deletion_log.media_type == MediaType.MOVIE else "tv"
+                media_id = await jellyseerr_client.get_media_id_by_tmdb(
+                    deletion_log.tmdb_id, media_type_str
                 )
+                if media_id:
+                    media_success, media_msg = await jellyseerr_client.delete_media(media_id)
+                    messages.append(f"Media: {media_msg}")
+                else:
+                    media_success = True
+                    messages.append("Media: No entry found (already cleared)")
+
+                success = req_success and media_success
+                message = "; ".join(messages)
             else:
                 success = True
                 message = "No ID available for this service"

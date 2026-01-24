@@ -244,6 +244,7 @@ class DeletionLog(Base):
     jellyseerr_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     poster_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    is_anime: Mapped[bool] = mapped_column(Boolean, default=False)  # For Shoko sync determination
 
     # Who/what initiated deletion
     source: Mapped[DeletionSource] = mapped_column(Enum(DeletionSource))

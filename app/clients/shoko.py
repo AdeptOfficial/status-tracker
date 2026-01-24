@@ -1,4 +1,4 @@
-"""Shoko SignalR client for real-time file matching events.
+"""Shoko client for SignalR events and HTTP API.
 
 Shoko uses SignalR (Microsoft's WebSocket-based protocol) for push notifications
 instead of traditional webhooks. This client maintains a persistent connection
@@ -6,6 +6,9 @@ to receive FileMatched events when anime files are identified.
 
 SignalR Hub: http://shoko:8111/signalr/aggregate?feeds=shoko,file
 Events: file:matched, file:deleted, file:relocated (Shoko 5.x+)
+
+HTTP API: http://shoko:8111/api/v3/...
+Used for: removing missing files, health checks, etc.
 
 Connection states:
 - DISCONNECTED: Not connected
@@ -18,8 +21,9 @@ import asyncio
 import enum
 import logging
 from dataclasses import dataclass
-from typing import Callable, Awaitable, Optional
+from typing import Callable, Awaitable, Optional, Tuple
 
+import httpx
 from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
 
@@ -403,3 +407,88 @@ def get_shoko_client() -> ShokoClient:
     if _shoko_client is None:
         _shoko_client = ShokoClient()
     return _shoko_client
+
+
+class ShokoHttpClient:
+    """
+    HTTP API client for Shoko Server.
+
+    Used for actions that require HTTP API calls (not SignalR):
+    - Removing missing files
+    - Health checks
+    - Series/file lookups
+    """
+
+    def __init__(
+        self,
+        host: str = settings.SHOKO_HOST,
+        port: int = settings.SHOKO_PORT,
+        api_key: str = settings.SHOKO_API_KEY,
+    ):
+        self.host = host
+        self.port = port
+        self.api_key = api_key
+        self._client = httpx.AsyncClient(timeout=30.0)
+
+    @property
+    def base_url(self) -> str:
+        """Base URL for Shoko API."""
+        return f"http://{self.host}:{self.port}"
+
+    def _headers(self) -> dict:
+        """Get headers with API key auth."""
+        return {"apikey": self.api_key}
+
+    async def health_check(self) -> bool:
+        """Check if Shoko is reachable."""
+        if not self.api_key:
+            return False
+        try:
+            resp = await self._client.get(
+                f"{self.base_url}/api/v3/Init/Status",
+                headers=self._headers(),
+            )
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error(f"Shoko health check failed: {e}")
+            return False
+
+    async def remove_missing_files(self) -> Tuple[bool, str]:
+        """
+        Trigger Shoko to scan for and remove entries for missing files.
+
+        This is the key method for deletion sync - when files are deleted
+        from disk, Shoko needs to be told to scan and remove the orphaned
+        database entries.
+
+        Returns:
+            Tuple of (success, message)
+        """
+        if not self.api_key:
+            return False, "Shoko API key not configured"
+
+        try:
+            # Shoko API endpoint to remove missing files
+            # GET /api/v3/Action/RemoveMissingFiles (Shoko uses GET for actions)
+            resp = await self._client.get(
+                f"{self.base_url}/api/v3/Action/RemoveMissingFiles",
+                headers=self._headers(),
+            )
+
+            if resp.status_code in (200, 204):
+                logger.info("Triggered Shoko RemoveMissingFiles scan")
+                return True, "RemoveMissingFiles scan triggered - orphaned entries will be cleaned up"
+            else:
+                error_msg = f"Shoko RemoveMissingFiles failed: HTTP {resp.status_code}"
+                logger.error(f"{error_msg} - {resp.text}")
+                return False, error_msg
+
+        except httpx.TimeoutException:
+            return False, "Shoko API timeout"
+        except Exception as e:
+            logger.error(f"Shoko RemoveMissingFiles error: {e}")
+            return False, f"Error: {e}"
+
+
+# Global HTTP client instance
+shoko_http_client = ShokoHttpClient()
