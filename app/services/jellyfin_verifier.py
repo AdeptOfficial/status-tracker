@@ -42,7 +42,7 @@ RETRY_DELAY_SECONDS = 15    # Delay between retries
 MAX_RETRIES = 3             # Number of retry attempts
 
 # Fallback check threshold - requests stuck longer than this get checked
-STUCK_THRESHOLD_MINUTES = 5
+STUCK_THRESHOLD_MINUTES = 2
 
 # VFS regeneration delay - time to wait after library scan for Shokofin VFS to regenerate
 VFS_REGENERATION_DELAY = 10  # seconds (increased from 3s for reliability)
