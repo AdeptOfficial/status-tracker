@@ -157,11 +157,26 @@ class SonarrPlugin(ServicePlugin):
 
         Creates Episode rows for each episode in the download.
         All episodes in a season pack share the same qbit_hash.
+
+        For per-episode grabs, this is called multiple times (once per episode).
+        We query Sonarr API for the actual episode count on first grab.
         """
         series = payload.get("series", {})
         release = payload.get("release", {})
         episodes_data = payload.get("episodes", [])
         download_id = payload.get("downloadId")
+
+        # Debug log the webhook payload structure
+        logger.debug(
+            f"Sonarr Grab webhook: series={series.get('title')}, "
+            f"seriesId={series.get('id')}, tvdbId={series.get('tvdbId')}, "
+            f"episodes_count={len(episodes_data)}, downloadId={download_id[:16] if download_id else 'N/A'}..."
+        )
+        if episodes_data:
+            ep_summary = [f"S{e.get('seasonNumber', 0):02d}E{e.get('episodeNumber', 0):02d}" for e in episodes_data[:5]]
+            if len(episodes_data) > 5:
+                ep_summary.append(f"...+{len(episodes_data) - 5} more")
+            logger.debug(f"Sonarr Grab episodes: {', '.join(ep_summary)}")
 
         # Store the Sonarr series ID for deletion sync
         sonarr_id = series.get("id")
@@ -169,7 +184,10 @@ class SonarrPlugin(ServicePlugin):
             request.sonarr_id = sonarr_id
 
         # Store the qBittorrent hash for later correlation
-        if download_id:
+        # NOTE: Only set on first grab to avoid overwriting when multiple torrents
+        # are grabbed (e.g., season pack + missing episodes). Episode-level hashes
+        # are the source of truth for multi-torrent tracking.
+        if download_id and not request.qbit_hash:
             request.qbit_hash = download_id
 
         # Store IMDB ID from series
@@ -193,20 +211,46 @@ class SonarrPlugin(ServicePlugin):
         request.release_group = release.get("releaseGroup")
 
         # CREATE EPISODE ROWS from webhook data (no API call needed!)
+        # For per-episode grabs, check if episode already exists to avoid duplicates
         for ep_data in episodes_data:
-            episode = Episode(
-                request_id=request.id,
-                season_number=ep_data.get("seasonNumber"),
-                episode_number=ep_data.get("episodeNumber"),
-                episode_title=ep_data.get("title"),
-                sonarr_episode_id=ep_data.get("id"),
-                episode_tvdb_id=ep_data.get("tvdbId"),
-                qbit_hash=download_id,  # All share same hash for season pack
-                state=EpisodeState.GRABBING,
-            )
-            db.add(episode)
+            season_num = ep_data.get("seasonNumber")
+            episode_num = ep_data.get("episodeNumber")
 
-        request.total_episodes = len(episodes_data)
+            # Check if episode already exists
+            stmt = select(Episode).where(
+                Episode.request_id == request.id,
+                Episode.season_number == season_num,
+                Episode.episode_number == episode_num,
+            )
+            result = await db.execute(stmt)
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                # Update hash if different (new grab for same episode)
+                if download_id and existing.qbit_hash != download_id:
+                    existing.qbit_hash = download_id
+                    existing.state = EpisodeState.GRABBING
+                    logger.debug(f"Updated existing episode S{season_num:02d}E{episode_num:02d} with new hash")
+            else:
+                episode = Episode(
+                    request_id=request.id,
+                    season_number=season_num,
+                    episode_number=episode_num,
+                    episode_title=ep_data.get("title"),
+                    sonarr_episode_id=ep_data.get("id"),
+                    episode_tvdb_id=ep_data.get("tvdbId"),
+                    qbit_hash=download_id,  # All share same hash for season pack
+                    state=EpisodeState.GRABBING,
+                )
+                db.add(episode)
+                logger.debug(f"Created new episode S{season_num:02d}E{episode_num:02d}")
+
+        # Don't overwrite total_episodes if already set by Jellyseerr at request creation
+        # This preserves the accurate count for per-episode grab progress display
+        if not request.total_episodes:
+            # Fallback only if Jellyseerr didn't set it (shouldn't happen for TV)
+            request.total_episodes = len(episodes_data)
+            logger.debug(f"Set total_episodes={len(episodes_data)} from webhook (fallback)")
 
         # Store season info from first episode (for display)
         if episodes_data:
