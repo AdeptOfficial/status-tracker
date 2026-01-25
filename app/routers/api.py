@@ -340,12 +340,24 @@ async def sync_alternate_titles(
         f"(grabbed: {grabbed})"
     )
 
+    # Get release info for debugging
+    releases = await radarr_client.search_releases(radarr_id)
+    release_info = []
+    for r in releases[:5]:
+        release_info.append({
+            "title": r.get("title", "")[:60],
+            "approved": r.get("approved", False),
+            "rejections": r.get("rejections", [])[:3],
+        })
+
     return {
         "success": True,
         "message": f"Added {len(title_strings)} alternate titles",
         "titles_added": len(title_strings),
         "grabbed": grabbed,
-        "titles": title_strings[:10],  # Return first 10 for display
+        "titles": title_strings[:10],
+        "releases_found": len(releases),
+        "sample_releases": release_info,
     }
 
 

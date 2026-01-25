@@ -4,27 +4,31 @@
 
 {% block content %}
 <div class="space-y-6">
-    <!-- Header with stats -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-700 pb-4">
-        <div>
-            <h1 class="text-2xl font-bold">Active Requests</h1>
-            <p class="text-gray-400">{{ requests|length }} request{% if requests|length != 1 %}s{% endif %} in progress</p>
-        </div>
-
-        <!-- Connection status indicator -->
+    <!-- Connection status indicator (fixed, not refreshed) -->
+    <div class="flex justify-end">
         <div class="flex items-center space-x-2">
             <span class="text-sm text-gray-400" id="update-status">Connecting...</span>
             <div id="connection-dot" class="w-2 h-2 bg-yellow-500 rounded-full"></div>
         </div>
     </div>
 
-    <!-- Request cards (this container refreshes on SSE updates) -->
+    <!-- Refreshable content area (includes header + cards) -->
     <div id="request-list"
          hx-get="/"
          hx-trigger="status-update"
          hx-select="#request-list"
-         hx-swap="outerHTML"
-         class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+         hx-swap="outerHTML">
+
+        <!-- Header with stats -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-700 pb-4 mb-4">
+            <div>
+                <h1 class="text-2xl font-bold">Active Requests</h1>
+                <p class="text-gray-400">{{ requests|length }} request{% if requests|length != 1 %}s{% endif %} in progress</p>
+            </div>
+        </div>
+
+        <!-- Request cards grid -->
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {% if requests %}
             {% for request in requests %}
                 {% include "components/card.html" %}
@@ -39,6 +43,7 @@
                 <p class="mt-1 text-gray-500">Ready for requests.</p>
             </div>
         {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -51,12 +56,15 @@
 
     let eventSource = null;
     let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5;
-    const reconnectDelay = 3000;
+    let isConnecting = false;
+    let reconnectTimer = null;
+    const maxReconnectAttempts = 10;
+    const baseReconnectDelay = 2000;
 
     function updateConnectionStatus(connected, message) {
         const dot = document.getElementById('connection-dot');
         const status = document.getElementById('update-status');
+        if (!dot || !status) return;
 
         if (connected) {
             dot.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse';
@@ -70,17 +78,40 @@
     }
 
     function connectSSE() {
-        if (eventSource) {
-            eventSource.close();
+        // Prevent multiple simultaneous connection attempts
+        if (isConnecting) {
+            console.log('SSE connection already in progress, skipping');
+            return;
         }
 
+        // Clear any pending reconnect
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+
+        // Close existing connection if any
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+
+        isConnecting = true;
         updateConnectionStatus(false, 'Connecting...');
-        eventSource = new EventSource('/api/sse');
+
+        try {
+            eventSource = new EventSource('/api/sse');
+        } catch (err) {
+            console.error('Failed to create EventSource:', err);
+            isConnecting = false;
+            scheduleReconnect();
+            return;
+        }
 
         eventSource.onopen = function() {
-            console.log('SSE connected');
+            console.log('SSE connection opened');
+            isConnecting = false;
             reconnectAttempts = 0;
-            // Don't update status here - wait for 'connected' event
         };
 
         // Handle the initial connected event
@@ -97,7 +128,6 @@
             try {
                 const data = JSON.parse(e.data);
                 const title = data.request?.title || 'Request';
-                const state = data.request?.state || '';
 
                 // Brief visual feedback
                 updateConnectionStatus(true, `Updated: ${title}`);
@@ -111,25 +141,45 @@
             }
 
             // Trigger htmx to refresh the list
-            // Note: Can't use 'sse:' prefix - htmx interprets that as its SSE extension
             htmx.trigger('#request-list', 'status-update');
         });
 
         eventSource.onerror = function(e) {
             console.error('SSE error:', e);
-            updateConnectionStatus(false, 'Connection lost');
-            eventSource.close();
+            isConnecting = false;
 
-            // Attempt to reconnect with exponential backoff
-            if (reconnectAttempts < maxReconnectAttempts) {
-                reconnectAttempts++;
-                const delay = reconnectDelay * reconnectAttempts;
-                updateConnectionStatus(false, `Reconnecting in ${delay/1000}s...`);
-                setTimeout(connectSSE, delay);
+            // Check if connection was closed cleanly
+            if (eventSource.readyState === EventSource.CLOSED) {
+                updateConnectionStatus(false, 'Connection closed');
+                scheduleReconnect();
             } else {
-                updateConnectionStatus(false, 'Connection failed - refresh page');
+                updateConnectionStatus(false, 'Connection error');
+                eventSource.close();
+                scheduleReconnect();
             }
         };
+    }
+
+    function scheduleReconnect() {
+        if (reconnectTimer) return; // Already scheduled
+
+        if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            // Exponential backoff with jitter
+            const delay = Math.min(baseReconnectDelay * Math.pow(1.5, reconnectAttempts - 1), 30000);
+            const jitter = Math.random() * 1000;
+            const totalDelay = delay + jitter;
+
+            updateConnectionStatus(false, `Reconnecting in ${Math.round(totalDelay/1000)}s...`);
+            console.log(`SSE reconnect scheduled in ${totalDelay}ms (attempt ${reconnectAttempts})`);
+
+            reconnectTimer = setTimeout(() => {
+                reconnectTimer = null;
+                connectSSE();
+            }, totalDelay);
+        } else {
+            updateConnectionStatus(false, 'Connection failed - refresh page');
+        }
     }
 
     // Connect on page load
@@ -137,6 +187,9 @@
 
     // Cleanup on page unload
     window.addEventListener('beforeunload', function() {
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+        }
         if (eventSource) {
             eventSource.close();
         }

@@ -111,6 +111,19 @@ If no file events logged after file processing, SignalR is broken.
 5. VFS generated 13 entries (S1: 1 episode, S2: 12 episodes)
 6. Status-tracker transitioned to `available`
 
+## Successful Test: Cosmic Princess Kaguya (2026-01-25) - Anime Movie
+
+1. Movie stuck at `anime_matching` - VFS showed only 3 of 4 movies
+2. Root cause: `<FilterMovieLibraries>true</FilterMovieLibraries>`
+3. This setting excludes movies without TMDB cross-references in Shoko
+4. Movie had no TMDB link: `TMDB={'Movie': [], 'Show': []}`
+5. Fix: Set `<FilterMovieLibraries>false</FilterMovieLibraries>`
+6. Alternative: Add AniDB ID to `<VFS_AlwaysIncludedAnidbIdList>`
+7. Restarted Jellyfin, VFS generated 4 entries
+8. Status-tracker transitioned to `available`
+
+---
+
 ## Config File Location
 
 ```
@@ -120,3 +133,18 @@ If no file events logged after file processing, SignalR is broken.
 Key sections:
 - `<LibraryFolders>` - Media folder mappings
 - `ManagedFolderId` - Must match Shoko import folder ID (1=anime_shows, 2=anime_movies)
+- `<FilterMovieLibraries>` - If true, excludes movies without TMDB (set to false for anime)
+- `<VFS_AlwaysIncludedAnidbIdList>` - Whitelist AniDB IDs to always include in VFS
+
+---
+
+## Troubleshooting Checklist
+
+When anime is stuck at `anime_matching`:
+
+1. **Check Shoko** - Is the file matched? (`/api/v3/Series/{id}/File`)
+2. **Check SignalR** - Is Shokofin connected? (Jellyfin logs)
+3. **Check VFS logs** - How many entries created? (`Created X, skipped Y, Total=Z`)
+4. **Check TMDB** - Does series have TMDB link? (`/api/v3/Series/{id}` → IDs.TMDB)
+5. **Check FilterMovieLibraries** - Is it filtering out movies without TMDB?
+6. **Check library config** - Is the library configured in Shokofin?

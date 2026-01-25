@@ -3,15 +3,10 @@
 Why SSE over WebSocket?
 - One-way server→client is exactly what we need (status updates)
 - Native browser support with auto-reconnect
-- htmx has a dedicated extension for it
 - Simpler to implement and debug
-
-Usage in templates:
-    <div hx-ext="sse" sse-connect="/api/sse">
-        <div sse-swap="update" hx-swap="innerHTML">...</div>
-    </div>
 """
 
+import json
 import logging
 from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
@@ -36,17 +31,13 @@ async def sse_endpoint():
     Event format:
         event: update
         data: {"event_type": "state_change", "request_id": 1, "request": {...}}
-
-    The htmx SSE extension handles this automatically when templates use:
-        sse-connect="/api/sse"
-        sse-swap="update"
     """
 
     async def event_generator():
         """Generate SSE events from broadcaster."""
         logger.info("SSE client connecting...")
 
-        # Send initial keepalive (helps with proxy timeouts)
+        # Send initial connected event
         yield {
             "event": "connected",
             "data": '{"status": "connected"}',
@@ -54,25 +45,20 @@ async def sse_endpoint():
 
         # Subscribe and yield events
         async for message in broadcaster.subscribe():
-            # broadcaster already formats as SSE string, but sse-starlette
-            # expects dict with event/data keys, so we parse it
-            # Actually, the broadcaster yields raw SSE strings like:
-            #   "event: update\ndata: {...}\n\n"
-            # We need to convert that to the format sse-starlette expects
-            lines = message.strip().split("\n")
-            event_name = "message"
-            data = ""
+            if message is None:
+                # Heartbeat - yield SSE comment to keep connection alive
+                # sse_starlette handles this when we yield a comment string
+                yield {"comment": "heartbeat"}
+                continue
 
-            for line in lines:
-                if line.startswith("event: "):
-                    event_name = line[7:]
-                elif line.startswith("data: "):
-                    data = line[6:]
+            # message is a dict with 'event' and 'data' keys
+            event_name = message.get("event", "message")
+            data = message.get("data", {})
 
-            logger.debug(f"Yielding SSE event: {event_name}, data_preview={data[:100] if data else 'empty'}...")
+            logger.debug(f"Yielding SSE event: {event_name}")
             yield {
                 "event": event_name,
-                "data": data,
+                "data": json.dumps(data) if isinstance(data, dict) else str(data),
             }
 
     return EventSourceResponse(event_generator())

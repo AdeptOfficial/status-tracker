@@ -6,6 +6,64 @@ Development log for the status-tracker project. New entries at the top.
 
 ---
 
+## 2026-01-25: Fixed SSE Broadcasts Not Reaching Frontend
+
+### Problem
+
+SSE connection established (green "Live updates active" indicator), but state changes from webhooks weren't triggering UI updates. Broadcasts were silently failing.
+
+### Root Cause
+
+After `db.commit()` in the webhook handler, SQLAlchemy expires object attributes. When `broadcaster.broadcast_update()` tried to access `request.state` and other attributes for Pydantic serialization, the detached/expired object caused silent failures.
+
+### Fix
+
+Added `await db.refresh(media_request)` after commit in `app/routers/webhooks.py:70` to reload object attributes before broadcasting.
+
+```python
+await db.commit()
+if media_request:
+    await db.refresh(media_request)  # <-- Fix: reload attributes after commit
+    await broadcaster.broadcast_update(media_request, event_type=event_type)
+```
+
+### Verification
+
+- SSE events now appear in browser console: `SSE update received: {event_type: 'new_request'...}`
+- UI auto-updates when requests change state (Grabbed, Downloading, etc.)
+
+---
+
+## 2026-01-25: Fixed Shokofin VFS Excluding Anime Without TMDB
+
+### Problem
+
+Anime movie "Cosmic Princess Kaguya!" stuck at `anime_matching` indefinitely. VFS generation showed only 3 of 4 movies, consistently skipping the new content.
+
+### Root Cause
+
+Shokofin setting `<FilterMovieLibraries>true</FilterMovieLibraries>` excludes movies without TMDB cross-references in Shoko. The movie had no TMDB link (AniDB 19701 was matched but not cross-referenced to TMDB 1575337).
+
+### Fix
+
+Set `FilterMovieLibraries=false` in Shokofin.xml and restart Jellyfin. VFS then included all 4 movies.
+
+### Documentation
+
+- Created: `issues/resolved/2026-01-25-shokofin-filtermovielibraries-excluding-anime.md`
+- Updated: `docs/reference/SHOKOFIN-VFS-REBUILD.md` with troubleshooting checklist
+- Created: `.claude/memory/session-2026-01-25-shokofin-vfs-filter-fix.md`
+
+### Also Fixed: SSE Timeout Disconnections
+
+Deployed `--timeout-keep-alive 60` to Uvicorn Dockerfile. SSE connections were dropping after 5 seconds (Uvicorn default) before the 15-second heartbeat could fire.
+
+### Pending Issue Noted
+
+qBittorrent progress only broadcasts on 5% changes - documented in `issues/2026-01-25-qbittorrent-progress-threshold.md` for later fix.
+
+---
+
 ## 2026-01-22: Fixed SSE Live Updates Not Pushing to Frontend
 
 ### Problem

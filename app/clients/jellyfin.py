@@ -453,9 +453,17 @@ class JellyfinClient:
             for item in items:
                 item_name = item.get("Name", "")
                 item_year = item.get("ProductionYear")
+                title_lower = title.lower()
+                name_lower = item_name.lower()
 
-                # Check if title matches (case-insensitive)
-                if item_name.lower() != title.lower():
+                # Check title match: exact OR request title contained in item name
+                # (handles anime where English "Mirai" matches Japanese "Mirai no Mirai")
+                title_matches = (
+                    name_lower == title_lower or
+                    name_lower.startswith(title_lower + " ") or
+                    title_lower in name_lower.split()  # word boundary match
+                )
+                if not title_matches:
                     continue
 
                 # If year provided, check it matches

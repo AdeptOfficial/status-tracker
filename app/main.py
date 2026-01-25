@@ -24,6 +24,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Enable DEBUG logging for Shoko client to see raw event payloads
+logging.getLogger("app.clients.shoko").setLevel(logging.DEBUG)
+
 # Shoko SignalR imports (conditional)
 if settings.ENABLE_SHOKO:
     from app.clients.shoko import get_shoko_client

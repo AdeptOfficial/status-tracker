@@ -380,6 +380,77 @@ async def verify_jellyfin_availability(request_id: int, tmdb_id: int) -> bool:
     return False
 
 
+async def verify_movie_by_tmdb(tmdb_id: int) -> bool:
+    """
+    Verify a movie in Jellyfin by TMDB ID.
+
+    Called when Shoko sends MovieUpdated with Reason: 'Added'.
+    Finds the matching request and triggers verification.
+
+    This is faster than waiting for the fallback loop since it's triggered
+    immediately when Shoko finishes processing.
+
+    Args:
+        tmdb_id: The TMDB ID from Shoko's MovieUpdated event
+
+    Returns:
+        True if verification succeeded, False otherwise
+    """
+    logger.info(f"[MOVIE UPDATED] Starting verification for TMDB {tmdb_id}")
+
+    # Trigger library scan first to ensure VFS is updated
+    await jellyfin_client.trigger_library_scan()
+
+    # Wait for VFS regeneration
+    await asyncio.sleep(VFS_REGENERATION_DELAY)
+
+    async with async_session() as db:
+        # Find request by TMDB ID in verifiable states
+        stmt = (
+            select(MediaRequest)
+            .options(selectinload(MediaRequest.episodes))
+            .where(
+                MediaRequest.tmdb_id == tmdb_id,
+                MediaRequest.state.in_([
+                    RequestState.IMPORTING,
+                    RequestState.ANIME_MATCHING,
+                ]),
+            )
+        )
+        result = await db.execute(stmt)
+        request = result.scalar_one_or_none()
+
+        if not request:
+            logger.debug(
+                f"[MOVIE UPDATED] No matching request found for TMDB {tmdb_id} "
+                f"in verifiable state"
+            )
+            return False
+
+        logger.info(
+            f"[MOVIE UPDATED] Found request '{request.title}' (ID: {request.id}) "
+            f"for TMDB {tmdb_id}, verifying in Jellyfin..."
+        )
+
+        # Use unified verification router
+        verified = await verify_request(request, db)
+
+        if verified:
+            await db.commit()
+            await broadcaster.broadcast_update(request)
+            logger.info(
+                f"[MOVIE UPDATED] Verified: {request.title} → AVAILABLE "
+                f"(TMDB {tmdb_id})"
+            )
+            return True
+
+        logger.debug(
+            f"[MOVIE UPDATED] {request.title} not yet in Jellyfin, "
+            f"fallback will continue checking"
+        )
+        return False
+
+
 async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest]:
     """
     Periodic fallback check for requests stuck in DOWNLOADED, IMPORTING, or ANIME_MATCHING.

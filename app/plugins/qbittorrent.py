@@ -281,16 +281,17 @@ class QBittorrentPlugin(ServicePlugin):
                         episode.state = EpisodeState.DOWNLOADING
 
             # Transition to DOWNLOADING
+            size_str = format_size(torrent.size) if torrent.size else ""
             await state_machine.transition(
                 request,
                 RequestState.DOWNLOADING,
                 db,
                 service=self.name,
                 event_type="Started",
-                details=f"Downloading: {format_size(torrent.size)}",
-                raw_data={"progress": progress, "state": torrent.state},
+                details=f"Downloading: {request.title}" + (f" ({size_str})" if size_str else ""),
+                raw_data={"progress": progress, "state": torrent.state, "size": torrent.size},
             )
-            logger.info(f"Download started: {request.title}")
+            logger.info(f"Download started: {request.title} ({size_str})")
             return True
 
         elif request.state == RequestState.DOWNLOADING:
@@ -320,13 +321,16 @@ class QBittorrentPlugin(ServicePlugin):
                 logger.info(f"Download complete: {request.title}")
                 return True
 
-            # Progress update (only log significant changes)
-            if abs(progress - old_progress) >= 0.05:  # 5% threshold
+            # Log significant progress changes (5% threshold to reduce log spam)
+            if abs(progress - old_progress) >= 0.05:
                 logger.debug(
                     f"Download progress: {request.title} - "
                     f"{progress * 100:.1f}% ({request.download_speed})"
                 )
-                return True
+
+            # Always broadcast progress updates for smooth UX
+            # The 3s poll interval already throttles updates adequately
+            return True
 
         return False
 

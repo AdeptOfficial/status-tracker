@@ -173,6 +173,8 @@ class ShokoClient:
         self._client.on("ShokoEvent:FileHashed", self._handle_file_hashed)
         self._client.on("ShokoEvent:SeriesUpdated", self._handle_series_updated)
         self._client.on("ShokoEvent:OnConnected", self._handle_shoko_connected)
+        self._client.on("ShokoEvent:EpisodeUpdated", self._handle_episode_updated)
+        self._client.on("ShokoEvent:FileNotMatched", self._handle_file_not_matched)
 
         # Connect and run - this blocks until connection closes or errors
         # State is set to CONNECTED via the on_open callback
@@ -225,8 +227,15 @@ class ShokoClient:
         """Handle legacy ShokoEvent:FileMatched events (Shoko 4.x)."""
         try:
             # Legacy format passes data as positional args
+            # Shoko sends data as ([{...}],) - list wrapped in tuple
             if args:
-                data = args[0] if isinstance(args[0], dict) else {"raw": args}
+                raw = args[0]
+                if isinstance(raw, list) and len(raw) > 0:
+                    data = raw[0]
+                elif isinstance(raw, dict):
+                    data = raw
+                else:
+                    data = {"raw": args}
                 # Debug: log raw payload to understand Shoko's event structure
                 logger.debug(f"Legacy FileMatched raw data: {data}")
 
@@ -266,33 +275,51 @@ class ShokoClient:
     async def _handle_movie_updated(self, *args) -> None:
         """Handle ShokoEvent:MovieUpdated events (anime movies).
 
-        Shoko sends MovieUpdated instead of FileMatched for anime movies.
-        We extract the file info and treat it like a file matched event.
+        Shoko sends MovieUpdated events with structure like:
+        [{'Source': 'TMDB', 'Reason': 'Added', 'MovieID': 198375, 'ShokoSeriesIDs': [...]}]
+
+        We filter for 'Added' reason (final event indicating movie is ready)
+        and trigger Jellyfin verification using the MovieID (TMDB ID).
         """
         try:
             logger.info(f"Movie updated event received: {args}")
-            if args:
-                data = args[0] if isinstance(args[0], dict) else {"raw": args}
+            if not args:
+                return
 
-                # MovieUpdated has different structure - try to extract file info
-                # Common fields: MovieId, RelativePath, or nested FileInfo
-                file_info = data.get("FileInfo", data)
+            # Handle both list and dict formats
+            raw_data = args[0] if args else []
+            updates = raw_data if isinstance(raw_data, list) else [raw_data]
 
-                event = FileEvent(
-                    file_id=file_info.get("FileId", file_info.get("fileId", data.get("MovieId", 0))),
-                    managed_folder_id=file_info.get("ManagedFolderId", file_info.get("managedFolderId", 0)),
-                    relative_path=file_info.get("RelativePath", file_info.get("relativePath", "")),
-                    # Movies are typically matched when we get this event
-                    has_cross_references=True,
-                    event_type="movie_updated",
+            for update in updates:
+                if not isinstance(update, dict):
+                    continue
+
+                reason = update.get("Reason", "")
+                movie_id = update.get("MovieID")  # This is the TMDB ID
+                source = update.get("Source", "")
+
+                # Skip non-final events (ImageAdded, etc.)
+                if reason != "Added":
+                    logger.debug(f"[MOVIE UPDATED] Skipping reason '{reason}' (not 'Added')")
+                    continue
+
+                if not movie_id:
+                    logger.warning(f"[MOVIE UPDATED] 'Added' event missing MovieID: {update}")
+                    continue
+
+                logger.info(
+                    f"[MOVIE UPDATED] Added event for TMDB {movie_id} (source: {source}) - "
+                    f"triggering Jellyfin verification"
                 )
 
-                if event.relative_path:
-                    await self._dispatch_file_matched(event)
-                else:
-                    logger.debug(f"MovieUpdated event missing path, raw data: {data}")
+                # Directly trigger Jellyfin verification for this TMDB ID
+                # This runs as a background task to not block SignalR processing
+                import asyncio
+                from app.services.jellyfin_verifier import verify_movie_by_tmdb
+                asyncio.create_task(verify_movie_by_tmdb(movie_id))
+
         except Exception as e:
-            logger.error(f"Error handling movie updated event: {e}")
+            logger.error(f"Error handling movie updated event: {e}", exc_info=True)
 
     async def _handle_file_deleted(self, *args) -> None:
         """Handle file:deleted events."""
@@ -312,7 +339,14 @@ class ShokoClient:
         """
         try:
             if args:
-                data = args[0] if isinstance(args[0], dict) else {"raw": args}
+                # Shoko sends data as ([{...}],) - list wrapped in tuple
+                raw = args[0]
+                if isinstance(raw, list) and len(raw) > 0:
+                    data = raw[0]
+                elif isinstance(raw, dict):
+                    data = raw
+                else:
+                    data = {"raw": args}
                 file_info = data.get("FileInfo", data)
                 relative_path = (
                     file_info.get("RelativePath", "") or
@@ -350,7 +384,14 @@ class ShokoClient:
         """
         try:
             if args:
-                data = args[0] if isinstance(args[0], dict) else {"raw": args}
+                # Shoko sends data as ([{...}],) - list wrapped in tuple
+                raw = args[0]
+                if isinstance(raw, list) and len(raw) > 0:
+                    data = raw[0]
+                elif isinstance(raw, dict):
+                    data = raw
+                else:
+                    data = {"raw": args}
                 series_id = data.get("SeriesId", data.get("seriesId", data.get("AnimeID", "unknown")))
                 series_name = data.get("SeriesName", data.get("seriesName", ""))
                 logger.info(f"Shoko series updated: {series_name or series_id}")
@@ -366,6 +407,81 @@ class ShokoClient:
         logger.info("Shoko SignalR handshake received (OnConnected)")
         if args:
             logger.debug(f"OnConnected data: {args}")
+
+    async def _handle_episode_updated(self, *args) -> None:
+        """Handle ShokoEvent:EpisodeUpdated events.
+
+        Fired when episode metadata is updated. For anime movies that AniDB
+        categorizes as series, this event fires instead of MovieUpdated.
+
+        Expected structure (from Shoko source):
+        {
+            "Source": "AniDB",
+            "Reason": "Added",
+            "EpisodeID": 12345,
+            "SeriesID": 6789,
+            "ShokoEpisodeIDs": [1],
+            "ShokoSeriesIDs": [1]
+        }
+        """
+        try:
+            logger.info(f"[DEBUG] EpisodeUpdated raw args: {args}")
+            if args:
+                # Shoko sends data as ([{...}],) - list wrapped in tuple
+                raw = args[0]
+                if isinstance(raw, list) and len(raw) > 0:
+                    data = raw[0]
+                elif isinstance(raw, dict):
+                    data = raw
+                else:
+                    data = {"raw": args}
+                logger.info(f"[DEBUG] EpisodeUpdated parsed data: {data}")
+
+                # Extract key fields for debugging
+                source = data.get("Source", "unknown")
+                reason = data.get("Reason", "unknown")
+                episode_id = data.get("EpisodeID", "unknown")
+                series_id = data.get("SeriesID", "unknown")
+                shoko_episode_ids = data.get("ShokoEpisodeIDs", [])
+                shoko_series_ids = data.get("ShokoSeriesIDs", [])
+
+                logger.info(
+                    f"Shoko episode updated: Source={source}, Reason={reason}, "
+                    f"EpisodeID={episode_id}, SeriesID={series_id}, "
+                    f"ShokoEpisodeIDs={shoko_episode_ids}, ShokoSeriesIDs={shoko_series_ids}"
+                )
+        except Exception as e:
+            logger.error(f"Error handling episode updated event: {e}", exc_info=True)
+
+    async def _handle_file_not_matched(self, *args) -> None:
+        """Handle ShokoEvent:FileNotMatched events.
+
+        Fired when Shoko cannot match a file to AniDB.
+        """
+        try:
+            logger.info(f"[DEBUG] FileNotMatched raw args: {args}")
+            if args:
+                # Shoko sends data as ([{...}],) - list wrapped in tuple
+                raw = args[0]
+                if isinstance(raw, list) and len(raw) > 0:
+                    data = raw[0]  # Unwrap the list
+                elif isinstance(raw, dict):
+                    data = raw
+                else:
+                    data = {"raw": args}
+                logger.info(f"[DEBUG] FileNotMatched parsed data: {data}")
+
+                # Try to extract file info
+                file_info = data.get("FileInfo", data)
+                relative_path = (
+                    file_info.get("RelativePath", "") or
+                    file_info.get("relativePath", "") or
+                    data.get("FileName", "") or
+                    data.get("filename", "")
+                )
+                logger.warning(f"Shoko file NOT matched: {relative_path or '(no path)'}")
+        except Exception as e:
+            logger.error(f"Error handling file not matched event: {e}", exc_info=True)
 
     def _parse_file_event(self, data: dict, event_type: str) -> FileEvent:
         """Parse raw SignalR data into FileEvent."""
