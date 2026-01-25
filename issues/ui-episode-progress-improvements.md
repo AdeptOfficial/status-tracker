@@ -51,40 +51,60 @@ S01E03  Be Right There           Pending
 
 **Reference:** MVP.md states "TV: Show episode counts ('3 downloaded, 5 downloading, 4 queued')"
 
-### 4. Grabbing State Should Show Episode Counts
+### 4. GRABBING State Should Show Episode Progress
 
-**Current:** When grabbing per-episode releases, shows single "Grabbed" event
-**Wanted:** Show "Grabbing 3/12 episodes" progress during grab phase
+**Current:** Shows single "Grabbing" badge with no episode count
+**Wanted:** Show "Grabbing 3/12 eps" during the grab phase
 
-For per-episode releases (not season packs), Sonarr sends multiple grab webhooks. UI should show:
-- During grab: "Grabbing 3/12 episodes"
-- Card badge: "Grabbing 3/12"
-- Timeline: Individual grab events or aggregated count
+**How Sonarr works:**
+- Sonarr searches indexer per episode
+- Accepts or rejects each episode individually
+- This is ONE state (GRABBING), not separate SEARCHING/GRABBING
 
-### 5. Timeline Downloading Event Should Show Size
+**Display requirements:**
 
-**Current:** "Downloading: Tsukigakirei"
-**Wanted:** "Downloading: Tsukigakirei - 45.2 GB"
+| Location | Display |
+|----------|---------|
+| Card badge | "Grabbing 3/12" |
+| Detail header | "Grabbing 3/12 episodes" |
 
-Include file size in the downloading timeline event details.
-
-### 6. New State: SEARCHING (Sonarr searching indexers)
-
-**Current:** Request stays at APPROVED while Sonarr searches
-**Wanted:** New SEARCHING state to show "Searching indexers..."
-
-**User sees:** Jellyseerr toast saying "Searching indexers for [BOCCHI THE ROCK! : S01E11]" but dashboard shows nothing happening.
-
-**Proposed state flow:**
+**Episode-level display during GRABBING:**
 ```
-APPROVED -> SEARCHING -> GRABBING -> DOWNLOADING -> ...
+S01E01  Spring and Hard Times    ✓ Grabbed
+S01E02  A Handful of Sand        ✓ Grabbed
+S01E03  Howling at the Moon      ✓ Grabbed
+S01E04  Passing Shower           ⏳ Searching...
+S01E05  Kokoro                   ○ Pending
 ```
 
 **Implementation notes:**
-- Sonarr doesn't send a webhook when starting search
-- Could trigger SEARCHING when request is created and Sonarr has the series
-- Or, add polling to detect when Sonarr is actively searching
-- Alternative: Skip this state if too complex, just improve messaging at APPROVED
+- Track grabbed_count on MediaRequest or calculate from Episode states
+- Episode states: PENDING → SEARCHING → GRABBED → DOWNLOADING
+- Update count as each Sonarr grab webhook arrives
+
+### 6. Timeline Downloading Event Should Show Size
+
+**Current:** "Downloading: Tsukigakirei"
+**Wanted:** "Downloading: Tsukigakirei - 78.2 GB"
+
+Include file size in the downloading timeline event details.
+
+### 7. Better Per-Episode Progress Display
+
+**Current:** All episodes show same "Downloading" badge
+**Wanted:** Show per-episode download % for season packs
+
+For season packs (single torrent, multiple files):
+- Use qBittorrent file progress API to get per-file %
+- Display individual episode progress bars
+
+Example:
+```
+S01E01  Spring and Hard Times    ████████████ 100%
+S01E02  A Handful of Sand        ████████░░░░  67%
+S01E03  Howling at the Moon      ████░░░░░░░░  33%
+S01E04  Passing Shower           ░░░░░░░░░░░░   0%
+```
 
 ## Files to Modify
 
