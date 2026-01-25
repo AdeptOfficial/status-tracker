@@ -129,6 +129,9 @@ class MediaRequest(Base):
     # Anime detection flag (set at Grab time from movie.tags or series.type)
     is_anime: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=None)
 
+    # Alternate titles (JSON array string) - for Shoko matching with Japanese titles
+    alternate_titles: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Download info (populated during DOWNLOADING)
     download_progress: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     download_speed: Mapped[Optional[str]] = mapped_column(

@@ -45,6 +45,7 @@ from app.services.auth import (
 )
 from app.clients.jellyfin import jellyfin_client
 from app.services.deletion_orchestrator import delete_request as do_delete_request
+from app.clients.radarr import radarr_client
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +256,97 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
             stats[state.value] = 0
 
     return {"stats": stats, "total": sum(stats.values())}
+
+
+@router.post("/requests/{request_id}/sync-titles")
+async def sync_alternate_titles(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Sync alternate titles from TMDB for anime movies.
+
+    This adds Japanese/alternate titles to Radarr so it can parse
+    releases with non-English names. Triggers a search after sync.
+
+    Useful for anime movies that can't grab releases due to title mismatch.
+    """
+    import json
+
+    stmt = select(MediaRequest).where(MediaRequest.id == request_id)
+    result = await db.execute(stmt)
+    request = result.scalar_one_or_none()
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    if not request.tmdb_id:
+        raise HTTPException(status_code=400, detail="Request has no TMDB ID")
+
+    # Look up movie in Radarr
+    movie = await radarr_client.get_movie_by_tmdb(request.tmdb_id)
+    if not movie:
+        raise HTTPException(
+            status_code=404,
+            detail="Movie not found in Radarr. Add it to Radarr first."
+        )
+
+    radarr_id = movie.get("id")
+    title = movie.get("title", request.title)
+
+    # Fetch alternate titles from TMDB via Radarr lookup
+    lookup_data = await radarr_client.lookup_movie(request.tmdb_id)
+    if not lookup_data:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not lookup movie from TMDB"
+        )
+
+    # Get alternate titles from lookup
+    lookup_titles = lookup_data.get("alternateTitles", [])
+    if not lookup_titles:
+        return {
+            "success": True,
+            "message": "No alternate titles found in TMDB",
+            "titles_added": 0,
+        }
+
+    # Extract title strings
+    title_strings = [t.get("title") for t in lookup_titles if t.get("title")]
+
+    # Add them to Radarr
+    success = await radarr_client.add_alternate_titles(radarr_id, title_strings)
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to add alternate titles to Radarr"
+        )
+
+    # Store in our database
+    request.alternate_titles = json.dumps(title_strings)
+    request.is_anime = True
+    request.radarr_id = radarr_id
+    await db.commit()
+
+    # Try to search and grab automatically
+    grabbed = await radarr_client.search_and_grab_anime(radarr_id, title_strings)
+
+    if not grabbed:
+        # Fallback to just triggering search
+        await radarr_client.trigger_search(radarr_id)
+
+    logger.info(
+        f"Synced {len(title_strings)} alternate titles for '{title}' "
+        f"(grabbed: {grabbed})"
+    )
+
+    return {
+        "success": True,
+        "message": f"Added {len(title_strings)} alternate titles",
+        "titles_added": len(title_strings),
+        "grabbed": grabbed,
+        "titles": title_strings[:10],  # Return first 10 for display
+    }
 
 
 @router.post("/requests/{request_id}/retry", response_model=MediaRequestResponse)

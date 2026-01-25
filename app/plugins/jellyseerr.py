@@ -12,6 +12,7 @@ Webhook setup in Jellyseerr:
   Enable: Request Pending, Request Approved, Media Available, Media Failed
 """
 
+import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING, Optional
@@ -23,6 +24,8 @@ from app.core.correlator import correlator
 from app.core.state_machine import state_machine
 from app.models import MediaRequest, MediaType, RequestState, EpisodeState
 from app.clients.jellyfin import jellyfin_client
+from app.database import async_session_maker
+from app.services.anime_title_sync import sync_anime_titles_background
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -274,7 +277,17 @@ class JellyseerrPlugin(ServicePlugin):
         # Mark as new for SSE broadcast (transient flag, not stored in DB)
         request._is_new = True
 
-        return request
+        # For movies, sync alternate titles from TMDB for anime release matching
+        # This runs in background to not block the webhook response
+        # Uses its own database session to avoid detached instance issues
+        if media_type == MediaType.MOVIE and request.tmdb_id:
+            asyncio.create_task(
+                sync_anime_titles_background(
+                    async_session_maker,
+                    request.id,
+                    request.tmdb_id,
+                )
+            )
 
     def get_timeline_details(self, event_data: dict) -> str:
         """Format event for timeline display."""

@@ -3,6 +3,7 @@
 Radarr sends webhooks for:
 - Grab: Movie found on indexer, sent to download client
 - Download: Movie file imported to library
+- MovieAdded: Movie added to Radarr (used to sync alternate titles for anime)
 - MovieDelete: Movie removed from Radarr
 - MovieFileDelete: Movie file removed
 
@@ -10,9 +11,11 @@ Webhook setup in Radarr:
   Settings -> Connect -> + -> Webhook
   URL: http://status-tracker:8000/hooks/radarr
   Method: POST
-  Events: On Grab, On Import, On Movie Delete, On Movie File Delete
+  Events: On Grab, On Import, On Movie Added, On Movie Delete, On Movie File Delete
 """
 
+import asyncio
+import json
 import logging
 from typing import TYPE_CHECKING, Optional
 
@@ -21,6 +24,9 @@ from app.core.correlator import correlator
 from app.core.state_machine import state_machine
 from app.models import MediaRequest, RequestState, DeletionSource
 from app.config import settings
+from app.clients.radarr import radarr_client
+from app.database import async_session_maker
+from app.services.anime_title_sync import sync_anime_titles_background
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -124,6 +130,11 @@ class RadarrPlugin(ServicePlugin):
 
         if event_type == "Download":
             return await self._handle_download(request, payload, db)
+
+        if event_type == "MovieAdded":
+            # Movie added to Radarr - sync alternate titles for anime
+            await self._handle_movie_added(payload, db)
+            return None  # Don't return request, just process titles
 
         if event_type == "MovieDelete":
             # Movie deleted in Radarr - sync deletion to other services
@@ -233,19 +244,20 @@ class RadarrPlugin(ServicePlugin):
             # Check if path contains /anime/ directory
             request.is_anime = "/anime/" in file_path.lower() if file_path else False
 
-        details = "Imported to library"
+        # Get filename for details
+        filename = ""
         if file_path:
-            # Show just the filename for readability
             filename = file_path.split("/")[-1] if "/" in file_path else file_path
-            details = f"Importing: {filename}"
 
         # Route to appropriate state based on is_anime flag
         if request.is_anime:
             # Anime needs Shoko matching before Jellyfin verification
             target_state = RequestState.ANIME_MATCHING
+            details = f"Waiting for Shoko: {filename}" if filename else "Waiting for Shoko match"
         else:
             # Regular movie goes directly to IMPORTING for Jellyfin verification
             target_state = RequestState.IMPORTING
+            details = f"Imported: {filename}" if filename else "Imported to library"
 
         await state_machine.transition(
             request,
@@ -259,6 +271,39 @@ class RadarrPlugin(ServicePlugin):
 
         logger.info(f"Radarr import: {request.title} -> {target_state.value}")
         return request
+
+    async def _handle_movie_added(
+        self, payload: dict, db: "AsyncSession"
+    ) -> None:
+        """Handle MovieAdded event - sync alternate titles for anime releases.
+
+        When a movie is added to Radarr, check if we have a matching request
+        and trigger the anime title sync service in background.
+        """
+        movie = payload.get("movie", {})
+        tmdb_id = movie.get("tmdbId")
+        title = movie.get("title", "Unknown")
+
+        if not tmdb_id:
+            logger.debug(f"MovieAdded missing tmdbId for '{title}'")
+            return
+
+        # Find our request for this movie
+        request = await correlator.find_by_any(db, tmdb_id=tmdb_id)
+        if not request:
+            logger.debug(f"No matching request for MovieAdded: '{title}'")
+            return
+
+        logger.info(f"MovieAdded: '{title}' - triggering anime title sync")
+
+        # Run title sync in background (service handles anime detection)
+        asyncio.create_task(
+            sync_anime_titles_background(
+                async_session_maker,
+                request.id,
+                tmdb_id,
+            )
+        )
 
     async def _handle_movie_delete(
         self, request: MediaRequest, payload: dict, db: "AsyncSession"

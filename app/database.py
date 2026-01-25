@@ -79,10 +79,9 @@ async def run_migrations(conn):
             "status": ("VARCHAR(20)", "'IN_PROGRESS'"),
             "is_anime": ("BOOLEAN", "0"),  # For Shoko sync determination
         },
-        # Add future migrations here:
-        # "requests": {
-        #     "new_column": ("VARCHAR(100)", "NULL"),
-        # },
+        "requests": {
+            "alternate_titles": ("TEXT", "NULL"),  # JSON array of alternate titles for Shoko matching
+        },
     }
 
     for table_name, columns in migrations.items():
