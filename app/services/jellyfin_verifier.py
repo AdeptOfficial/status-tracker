@@ -30,6 +30,7 @@ from app.models import MediaRequest, MediaType, RequestState
 from app.core.state_machine import state_machine
 from app.core.broadcaster import broadcaster
 from app.clients.jellyfin import jellyfin_client
+from app.config import settings
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -509,6 +510,21 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
     )
 
     transitioned = []
+
+    # Check SignalR health - if disconnected, trigger scan to force VFS update
+    if settings.ENABLE_SHOKO and settings.SHOKO_API_KEY:
+        try:
+            from app.clients.shoko import get_shoko_client, ConnectionState
+            shoko_client = get_shoko_client()
+            if shoko_client.state != ConnectionState.CONNECTED:
+                logger.warning(
+                    f"[FALLBACK] Shoko SignalR disconnected (state: {shoko_client.state.value}), "
+                    f"triggering library scan to force VFS regeneration"
+                )
+                await jellyfin_client.trigger_library_scan()
+                await asyncio.sleep(VFS_REGENERATION_DELAY)
+        except Exception as e:
+            logger.error(f"[FALLBACK] Error checking Shoko SignalR state: {e}")
 
     # Track if we need to trigger a scan to force Shokofin VFS regeneration
     # IMPORTING: Regular content waiting for Jellyfin to detect

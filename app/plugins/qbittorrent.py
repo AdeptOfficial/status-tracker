@@ -486,6 +486,10 @@ class QBittorrentPlugin(ServicePlugin):
                         if episode.state == EpisodeState.DOWNLOADING:
                             episode.state = EpisodeState.DOWNLOADED
 
+                # Clear download speed/eta on completion (mirrors webhook behavior at line 203-204)
+                request.download_speed = None
+                request.download_eta = None
+
                 # For TV, use aggregate state; for movies, use DOWNLOADED directly
                 if request.media_type == MediaType.TV:
                     target_state = calculate_aggregate_state(request)

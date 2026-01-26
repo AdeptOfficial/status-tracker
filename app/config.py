@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     Same image for dev/prod, just change env vars.
     """
 
+    # Logging
+    LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR
+
     # Database
     DATABASE_URL: str = "sqlite:///config/tracker.db"
 

@@ -229,5 +229,35 @@ class JellyseerrClient:
             return False, error_msg
 
 
+    async def get_tv_season_episode_count(self, tmdb_id: int, season_number: int) -> Optional[int]:
+        """
+        Get episode count for a TV season from Jellyseerr (TMDB data).
+
+        Used at request creation to enable "Searching 0/12 eps" display
+        before Sonarr even has the series. Jellyseerr caches TMDB data,
+        so this is available immediately when the request is made.
+
+        Args:
+            tmdb_id: TMDB ID of the TV series
+            season_number: Season number to get episode count for
+
+        Returns:
+            Episode count if found, None if not found or error
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get(f"/api/v1/tv/{tmdb_id}")
+
+            if response.status_code == 200:
+                data = response.json()
+                for season in data.get("seasons", []):
+                    if season.get("seasonNumber") == season_number:
+                        return season.get("episodeCount")
+            return None
+        except Exception as e:
+            logger.error(f"Error getting episode count from Jellyseerr: {e}")
+            return None
+
+
 # Singleton instance
 jellyseerr_client = JellyseerrClient()

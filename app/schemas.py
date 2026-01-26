@@ -123,22 +123,42 @@ class MediaRequestWithEpisodesResponse(MediaRequestResponse):
     """Media request with per-episode tracking (for TV shows)."""
 
     episodes: list[EpisodeResponse] = []
+    total_episodes: Optional[int] = None  # Actual total from Sonarr API (not just len(episodes))
 
     @property
     def episode_summary(self) -> dict:
-        """Get episode state summary for quick display."""
+        """Get episode state summary for quick display.
+
+        For GRABBING state, 'grabbed' = episodes with rows in DB,
+        'total' = actual episode count from Sonarr API.
+        This handles per-episode grabs where each webhook only includes 1 episode.
+        """
         if not self.episodes:
-            return {"total": 0, "available": 0, "downloading": 0, "pending": 0}
+            return {
+                "total": self.total_episodes or 0,
+                "grabbed": 0,
+                "available": 0,
+                "downloading": 0,
+                "pending": self.total_episodes or 0,
+            }
 
         available = sum(1 for e in self.episodes if e.state == EpisodeState.AVAILABLE)
         downloading = sum(1 for e in self.episodes if e.state == EpisodeState.DOWNLOADING)
-        pending = sum(1 for e in self.episodes if e.state in [EpisodeState.GRABBING])
+        grabbing = sum(1 for e in self.episodes if e.state == EpisodeState.GRABBING)
+
+        # Use total_episodes from Sonarr API if available, otherwise len(episodes)
+        total = self.total_episodes if self.total_episodes else len(self.episodes)
+
+        # grabbed = episodes we have rows for (grabbed from indexer)
+        grabbed = len(self.episodes)
 
         return {
-            "total": len(self.episodes),
+            "total": total,
+            "grabbed": grabbed,  # Episodes grabbed so far (rows in DB)
+            "grabbing": grabbing,  # Episodes in GRABBING state specifically
             "available": available,
             "downloading": downloading,
-            "pending": len(self.episodes) - available - downloading,
+            "pending": total - grabbed,  # Episodes not yet grabbed
         }
 
 

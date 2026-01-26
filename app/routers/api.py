@@ -713,3 +713,18 @@ async def sync_library(
         errors=result.errors,
         error_details=result.error_details,
     )
+
+
+@router.post("/admin/force-library-scan")
+async def force_library_scan(
+    user: AuthenticatedUser = Depends(require_admin_user),
+):
+    """
+    Force a Jellyfin library scan.
+
+    Triggers Shokofin VFS regeneration without needing stuck requests.
+    Used by n8n workflow for SignalR recovery.
+    """
+    await jellyfin_client.trigger_library_scan()
+    logger.info(f"Library scan triggered by {user.username}")
+    return {"success": True, "message": "Library scan triggered"}

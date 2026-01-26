@@ -17,15 +17,24 @@ from app.plugins import load_plugins, get_all_plugins
 from app.routers import webhooks_router, api_router, pages_router, sse_router
 from app.core.broadcaster import broadcaster
 
-# Configure logging
+# Configure logging from environment
+log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# Enable DEBUG logging for Shoko client to see raw event payloads
-logging.getLogger("app.clients.shoko").setLevel(logging.DEBUG)
+# Enable DEBUG logging for specific modules when needed
+if log_level == logging.DEBUG:
+    # These modules benefit from DEBUG logging during troubleshooting
+    logging.getLogger("app.clients.shoko").setLevel(logging.DEBUG)
+    logging.getLogger("app.clients.jellyseerr").setLevel(logging.DEBUG)
+    logging.getLogger("app.plugins.jellyseerr").setLevel(logging.DEBUG)
+    logging.getLogger("app.plugins.sonarr").setLevel(logging.DEBUG)
+else:
+    # Shoko always at DEBUG for event visibility (high volume but useful)
+    logging.getLogger("app.clients.shoko").setLevel(logging.DEBUG)
 
 # Shoko SignalR imports (conditional)
 if settings.ENABLE_SHOKO:

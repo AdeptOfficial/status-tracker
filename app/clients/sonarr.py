@@ -173,6 +173,41 @@ class SonarrClient:
             logger.error(f"Sonarr health check failed: {e}")
             return False
 
+    async def get_episode_count(self, series_id: int, season_number: int) -> Optional[int]:
+        """
+        Get total episode count for a specific series/season.
+
+        This is used to get the actual episode count for GRABBING state display,
+        since per-episode grabs send individual webhooks (each with episodes=[1 episode])
+        and we need the true total, not just len(webhook.episodes).
+
+        Args:
+            series_id: Sonarr series ID
+            season_number: Season number to count episodes for
+
+        Returns:
+            Episode count if found, None on error
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get(
+                "/api/v3/episode",
+                params={"seriesId": series_id, "seasonNumber": season_number}
+            )
+
+            if response.status_code == 200:
+                episodes = response.json()
+                count = len(episodes)
+                logger.debug(f"Sonarr: series {series_id} season {season_number} has {count} episodes")
+                return count
+            else:
+                logger.warning(f"Failed to get episodes for series {series_id}: {response.status_code}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error getting Sonarr episode count: {e}")
+            return None
+
     async def get_all_series(self) -> list[dict]:
         """
         Fetch all series from Sonarr for bulk sync.

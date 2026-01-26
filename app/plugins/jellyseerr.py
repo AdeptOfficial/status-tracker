@@ -24,6 +24,7 @@ from app.core.correlator import correlator
 from app.core.state_machine import state_machine
 from app.models import MediaRequest, MediaType, RequestState, EpisodeState
 from app.clients.jellyfin import jellyfin_client
+from app.clients.jellyseerr import jellyseerr_client
 from app.database import async_session_maker
 from app.services.anime_title_sync import sync_anime_titles_background
 
@@ -231,10 +232,15 @@ class JellyseerrPlugin(ServicePlugin):
 
         # Extract requested seasons for TV (from extra array)
         requested_seasons = None
+        logger.debug(f"Jellyseerr extra data: {extra}")
         for item in extra:
             if item.get("name") == "Requested Seasons":
                 requested_seasons = item.get("value")
+                logger.debug(f"Found requested_seasons: {requested_seasons}")
                 break
+
+        if media_type == MediaType.TV and not requested_seasons:
+            logger.warning(f"TV request but no requested_seasons found in extra: {extra}")
 
         # Set initial state based on auto-approval
         initial_state = RequestState.APPROVED if auto_approved else RequestState.REQUESTED
@@ -277,6 +283,26 @@ class JellyseerrPlugin(ServicePlugin):
         # Mark as new for SSE broadcast (transient flag, not stored in DB)
         request._is_new = True
 
+        # For TV shows, query Jellyseerr for episode count at request creation
+        # This enables "Searching 0/12 eps" display while Sonarr searches indexers
+        # Why Jellyseerr? The webhook fires BEFORE Sonarr has the series, but
+        # Jellyseerr already has TMDB data with episode counts cached
+        if media_type == MediaType.TV and tmdb_id and requested_seasons:
+            try:
+                # Parse first season from "1" or "1,2,3" format
+                first_season = int(requested_seasons.split(",")[0].strip())
+                request.season = first_season
+
+                # Query Jellyseerr for episode count (uses TMDB data)
+                episode_count = await jellyseerr_client.get_tv_season_episode_count(tmdb_id, first_season)
+                if episode_count:
+                    request.total_episodes = episode_count
+                    logger.info(f"Set total_episodes={episode_count} for {title} S{first_season:02d}")
+                else:
+                    logger.debug(f"Could not get episode count for {title} (TMDB {tmdb_id})")
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"Failed to parse requested_seasons '{requested_seasons}': {e}")
+
         # For movies, sync alternate titles from TMDB for anime release matching
         # This runs in background to not block the webhook response
         # Uses its own database session to avoid detached instance issues
@@ -288,6 +314,8 @@ class JellyseerrPlugin(ServicePlugin):
                     request.tmdb_id,
                 )
             )
+
+        return request
 
     def get_timeline_details(self, event_data: dict) -> str:
         """Format event for timeline display."""
