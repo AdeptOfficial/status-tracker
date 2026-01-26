@@ -45,6 +45,7 @@ from app.services.auth import (
 )
 from app.clients.jellyfin import jellyfin_client
 from app.services.deletion_orchestrator import delete_request as do_delete_request
+from app.services.jellyfin_verifier import verify_request
 from app.clients.radarr import radarr_client
 
 logger = logging.getLogger(__name__)
@@ -369,13 +370,18 @@ async def retry_request(
     """
     Retry a failed or timed out request.
 
-    This resets the request back to APPROVED state so it can be
-    re-grabbed by Sonarr/Radarr. Uses APPROVED (not REQUESTED) because
-    the state machine only allows FAILED/TIMEOUT -> APPROVED transitions.
+    First checks if the media is already available in Jellyfin. If found,
+    transitions directly to AVAILABLE (no re-download needed). If not found,
+    resets to APPROVED state for Sonarr/Radarr to re-grab.
 
     Only works for requests in FAILED or TIMEOUT states.
     """
-    stmt = select(MediaRequest).where(MediaRequest.id == request_id)
+    # Eager load episodes for TV verification
+    stmt = (
+        select(MediaRequest)
+        .options(selectinload(MediaRequest.episodes))
+        .where(MediaRequest.id == request_id)
+    )
     result = await db.execute(stmt)
     request = result.scalar_one_or_none()
 
@@ -389,14 +395,29 @@ async def retry_request(
                    f"Only failed or timed out requests can be retried."
         )
 
-    # Transition back to APPROVED (state machine allows FAILED/TIMEOUT -> APPROVED)
+    previous_state = request.state.value
+
+    # First check if media is already in Jellyfin
+    verified = await verify_request(request, db)
+
+    if verified:
+        # Found in Jellyfin - already transitioned to AVAILABLE by verify_request
+        await db.commit()
+        await broadcaster.broadcast_update(request)
+        logger.info(
+            f"Request {request_id} ({request.title}) found in Jellyfin, "
+            f"transitioned {previous_state} → AVAILABLE"
+        )
+        return MediaRequestResponse.model_validate(request)
+
+    # Not in Jellyfin - transition back to APPROVED for re-download
     success = await state_machine.transition(
         request,
         RequestState.APPROVED,
         db,
         service="api",
         event_type="Retry",
-        details=f"Retried from {request.state.value} state",
+        details=f"Retried from {previous_state} state (not in Jellyfin, re-downloading)",
     )
 
     if not success:
@@ -405,7 +426,7 @@ async def retry_request(
     await db.commit()
     await broadcaster.broadcast_update(request)
 
-    logger.info(f"Request {request_id} ({request.title}) retried")
+    logger.info(f"Request {request_id} ({request.title}) retried → APPROVED for re-download")
 
     return MediaRequestResponse.model_validate(request)
 

@@ -25,13 +25,16 @@ services:
       - TZ=${TZ:-America/Chicago}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATABASE_URL=sqlite:////config/tracker.db
-      # qBittorrent accessed via Gluetun (shares network namespace)
-      - QBIT_HOST=gluetun
-      - QBIT_PORT=8080
+      # qBittorrent (dev: gluetun container, prod: IP address)
+      - QBIT_HOST=${QBIT_HOST:-gluetun}
+      - QBIT_PORT=${QBIT_PORT:-8080}
       - QBIT_USERNAME=${QBIT_USERNAME:-admin}
       - QBIT_PASSWORD=${QBIT_PASSWORD}
-      # External URL for deep links (what users access)
+      # Jellyfin (dev: jellyfin container, prod: IP address)
+      - JELLYFIN_HOST=${JELLYFIN_HOST:-jellyfin}
+      - JELLYFIN_PORT=${JELLYFIN_PORT:-8096}
       - JELLYFIN_URL=${JELLYFIN_URL:-http://localhost:8096}
+      - JELLYFIN_API_KEY=${JELLYFIN_API_KEY:-}
       # Polling settings
       - POLL_INTERVAL=${POLL_INTERVAL:-5}
       # Shoko SignalR integration
@@ -45,13 +48,20 @@ services:
       - ENABLE_TIMEOUT_CHECKER=${ENABLE_TIMEOUT_CHECKER:-true}
       - DOWNLOADING_TIMEOUT=${DOWNLOADING_TIMEOUT:-1440}
       - IMPORTING_TIMEOUT=${IMPORTING_TIMEOUT:-60}
-      # Deletion sync settings (Part 2+)
-      # Host/port use defaults from config.py (container names on media-net)
-      - ENABLE_DELETION_SYNC=${ENABLE_DELETION_SYNC:-false}
-      - JELLYFIN_API_KEY=${JELLYFIN_API_KEY:-}
+      # Sonarr (dev: sonarr container, prod: IP address)
+      - SONARR_HOST=${SONARR_HOST:-sonarr}
+      - SONARR_PORT=${SONARR_PORT:-8989}
       - SONARR_API_KEY=${SONARR_API_KEY:-}
+      # Radarr (dev: radarr container, prod: IP address)
+      - RADARR_HOST=${RADARR_HOST:-radarr}
+      - RADARR_PORT=${RADARR_PORT:-7878}
       - RADARR_API_KEY=${RADARR_API_KEY:-}
+      # Jellyseerr (dev: jellyseerr container, prod: IP address)
+      - JELLYSEERR_HOST=${JELLYSEERR_HOST:-jellyseerr}
+      - JELLYSEERR_PORT=${JELLYSEERR_PORT:-5055}
       - JELLYSEERR_API_KEY=${JELLYSEERR_API_KEY:-}
+      # Deletion sync
+      - ENABLE_DELETION_SYNC=${ENABLE_DELETION_SYNC:-false}
       - ADMIN_USER_IDS=${ADMIN_USER_IDS:-}
     volumes:
       - /opt/appdata/status-tracker:/config

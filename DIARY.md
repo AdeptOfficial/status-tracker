@@ -12,11 +12,13 @@ Development log for the status-tracker project. New entries at the top.
 
 1. **Retry button broken:** Clicking retry on timed-out requests returned 500 error
 2. **No timeout recovery:** If Jellyfin eventually found a file after timeout, request stayed stuck
+3. **Retry blindly re-downloads:** Even if Jellyfin already has the file, retry would re-download
 
 ### Root Cause
 
 1. **api.py:** Retry endpoint tried `TIMEOUT -> REQUESTED` but state machine only allowed `TIMEOUT -> APPROVED`
 2. **state_machine.py:** Missing `TIMEOUT -> AVAILABLE` transition for when Jellyfin eventually finds the file
+3. **api.py:** Retry endpoint didn't check Jellyfin first before triggering re-download
 
 ### Fix
 
@@ -28,17 +30,23 @@ RequestState.TIMEOUT: [RequestState.APPROVED]
 RequestState.TIMEOUT: [RequestState.APPROVED, RequestState.AVAILABLE]
 ```
 
-**api.py** (retry endpoint):
+**api.py** (retry endpoint) - two changes:
+1. Fixed target state from `REQUESTED` to `APPROVED`
+2. Added Jellyfin check before re-download:
 ```python
-# Before:
-RequestState.REQUESTED
-# After:
-RequestState.APPROVED
+# First check if media is already in Jellyfin
+verified = await verify_request(request, db)
+if verified:
+    # Found - already transitioned to AVAILABLE
+    return
+# Not found - transition to APPROVED for re-download
 ```
 
 ### Result
 
 - Retry button now works for timed-out requests
+- Retry first checks if Jellyfin already has the file → marks AVAILABLE if found
+- Only re-downloads if file not in Jellyfin
 - Jellyfin verifier can mark timed-out requests as available if file is found later
 
 ---
