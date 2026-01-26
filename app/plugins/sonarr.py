@@ -143,6 +143,11 @@ class SonarrPlugin(ServicePlugin):
             # Don't delete the request, just log it (file cleanup is normal)
             return None
 
+        if event_type == "SeriesAdd":
+            # Series added to Sonarr - trigger anime title sync
+            await self._handle_series_added(request, payload, db)
+            return request
+
         if event_type == "Test":
             logger.info("Sonarr test webhook received")
             return None
@@ -408,6 +413,49 @@ class SonarrPlugin(ServicePlugin):
             delete_files=delete_files,
             source=DeletionSource.SONARR,
             skip_services=["sonarr"],  # Already deleted from Sonarr
+        )
+
+    async def _handle_series_added(
+        self, request: MediaRequest, payload: dict, db: "AsyncSession"
+    ) -> None:
+        """Handle SeriesAdd event - trigger anime title sync if applicable.
+
+        Similar to Radarr's MovieAdded webhook handler, this syncs alternate
+        titles from TVDB to enable better release matching for anime.
+        """
+        series = payload.get("series", {})
+        tvdb_id = series.get("tvdbId")
+        sonarr_id = series.get("id")
+
+        if not tvdb_id:
+            logger.debug("SeriesAdd webhook missing tvdbId, skipping title sync")
+            return
+
+        # Store Sonarr ID if not already set
+        if sonarr_id and not request.sonarr_id:
+            request.sonarr_id = sonarr_id
+
+        # Detect anime from series type
+        series_type = series.get("seriesType") or series.get("type", "")
+        if series_type.lower() != "anime":
+            logger.debug(f"Series '{request.title}' is not anime type, skipping title sync")
+            return
+
+        logger.info(
+            f"SeriesAdd: {request.title} (TVDB {tvdb_id}) - triggering anime title sync"
+        )
+
+        # Spawn background task for title sync
+        import asyncio
+        from app.database import async_session
+        from app.services.anime_title_sync import sync_anime_series_titles_background
+
+        asyncio.create_task(
+            sync_anime_series_titles_background(
+                db_factory=async_session,
+                request_id=request.id,
+                tvdb_id=tvdb_id,
+            )
         )
 
     def get_timeline_details(self, event_data: dict) -> str:

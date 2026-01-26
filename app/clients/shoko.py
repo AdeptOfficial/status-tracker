@@ -28,6 +28,7 @@ from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
 
 from app.config import settings
+from app.services.jellyfin_verifier import verify_movie_by_tmdb
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +246,12 @@ class ShokoClient:
 
                 # Also check top-level data for cross-refs if not in file_info
                 if not event.has_cross_references:
-                    event.has_cross_references = data.get("HasCrossReferences", data.get("hasCrossReferences", False))
+                    # Check for CrossReferences array first (Shoko sends array, not boolean)
+                    cross_refs = data.get("CrossReferences", data.get("crossReferences", []))
+                    if isinstance(cross_refs, list) and cross_refs:
+                        event.has_cross_references = True
+                    else:
+                        event.has_cross_references = data.get("HasCrossReferences", data.get("hasCrossReferences", False))
 
                 # If path is still empty, try alternative field names
                 if not event.relative_path:
@@ -314,8 +320,6 @@ class ShokoClient:
 
                 # Directly trigger Jellyfin verification for this TMDB ID
                 # This runs as a background task to not block SignalR processing
-                import asyncio
-                from app.services.jellyfin_verifier import verify_movie_by_tmdb
                 asyncio.create_task(verify_movie_by_tmdb(movie_id))
 
         except Exception as e:
@@ -425,7 +429,7 @@ class ShokoClient:
         }
         """
         try:
-            logger.info(f"[DEBUG] EpisodeUpdated raw args: {args}")
+            logger.debug(f"EpisodeUpdated raw args: {args}")
             if args:
                 # Shoko sends data as ([{...}],) - list wrapped in tuple
                 raw = args[0]
@@ -435,7 +439,7 @@ class ShokoClient:
                     data = raw
                 else:
                     data = {"raw": args}
-                logger.info(f"[DEBUG] EpisodeUpdated parsed data: {data}")
+                logger.debug(f"EpisodeUpdated parsed data: {data}")
 
                 # Extract key fields for debugging
                 source = data.get("Source", "unknown")
@@ -459,7 +463,7 @@ class ShokoClient:
         Fired when Shoko cannot match a file to AniDB.
         """
         try:
-            logger.info(f"[DEBUG] FileNotMatched raw args: {args}")
+            logger.debug(f"FileNotMatched raw args: {args}")
             if args:
                 # Shoko sends data as ([{...}],) - list wrapped in tuple
                 raw = args[0]
@@ -469,7 +473,7 @@ class ShokoClient:
                     data = raw
                 else:
                     data = {"raw": args}
-                logger.info(f"[DEBUG] FileNotMatched parsed data: {data}")
+                logger.debug(f"FileNotMatched parsed data: {data}")
 
                 # Try to extract file info
                 file_info = data.get("FileInfo", data)
@@ -484,12 +488,20 @@ class ShokoClient:
             logger.error(f"Error handling file not matched event: {e}", exc_info=True)
 
     def _parse_file_event(self, data: dict, event_type: str) -> FileEvent:
-        """Parse raw SignalR data into FileEvent."""
+        """Parse raw SignalR data into FileEvent.
+
+        Note: Shoko sends CrossReferences as an array, not HasCrossReferences boolean.
+        We check for the array first and use its presence as the boolean indicator.
+        """
+        # Check for CrossReferences array first (Shoko sends array, not boolean)
+        cross_refs = data.get("CrossReferences", data.get("crossReferences", []))
+        has_cross_refs = bool(cross_refs) if isinstance(cross_refs, list) else data.get("HasCrossReferences", data.get("hasCrossReferences", False))
+
         return FileEvent(
             file_id=data.get("FileId", data.get("fileId", 0)),
             managed_folder_id=data.get("ManagedFolderId", data.get("managedFolderId", 0)),
             relative_path=data.get("RelativePath", data.get("relativePath", "")),
-            has_cross_references=data.get("HasCrossReferences", data.get("hasCrossReferences", False)),
+            has_cross_references=has_cross_refs,
             event_type=event_type,
         )
 

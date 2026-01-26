@@ -58,10 +58,6 @@ class StateMachine:
     def __init__(self):
         self._listeners: list = []
 
-    def add_listener(self, callback):
-        """Add a callback to be notified on state changes."""
-        self._listeners.append(callback)
-
     def can_transition(
         self, current: RequestState, target: RequestState
     ) -> bool:

@@ -65,8 +65,3 @@ def get_plugin(name: str) -> Optional[ServicePlugin]:
 def get_all_plugins() -> list[ServicePlugin]:
     """Get all loaded plugins."""
     return list(_plugins.values())
-
-
-def get_polling_plugins() -> list[ServicePlugin]:
-    """Get plugins that require background polling."""
-    return [p for p in _plugins.values() if p.requires_polling]

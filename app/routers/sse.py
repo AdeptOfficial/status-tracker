@@ -55,7 +55,6 @@ async def sse_endpoint():
             event_name = message.get("event", "message")
             data = message.get("data", {})
 
-            logger.debug(f"Yielding SSE event: {event_name}")
             yield {
                 "event": event_name,
                 "data": json.dumps(data) if isinstance(data, dict) else str(data),

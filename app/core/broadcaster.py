@@ -64,7 +64,6 @@ class Broadcaster:
                 except asyncio.TimeoutError:
                     # No message received within timeout - yield None to signal heartbeat
                     yield None
-                    logger.debug("Sent SSE heartbeat")
         except asyncio.CancelledError:
             pass
         finally:

@@ -23,9 +23,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.clients.radarr import radarr_client
+from app.clients.sonarr import sonarr_client
 from app.models import MediaRequest
 
 logger = logging.getLogger(__name__)
+
+# Sonarr configuration (same pattern as Radarr)
+SONARR_POLL_INTERVAL = 2  # seconds between Sonarr checks
+SONARR_POLL_TIMEOUT = 30  # max seconds to wait for series in Sonarr
 
 # Configuration
 RADARR_POLL_INTERVAL = 2  # seconds between Radarr checks
@@ -184,6 +189,108 @@ class AnimeTitleSyncService:
             await self.db.commit()
             logger.debug(f"Stored {len(titles)} alternate titles for request {request_id}")
 
+    async def sync_series_titles(
+        self,
+        request_id: int,
+        tvdb_id: int,
+    ) -> bool:
+        """
+        Sync alternate titles for an anime TV series.
+
+        Mirrors sync_movie_titles but for TV series via Sonarr.
+
+        Args:
+            request_id: Our MediaRequest ID
+            tvdb_id: TVDB series ID
+
+        Returns:
+            True if sync was successful or not needed (non-anime)
+        """
+        logger.info(f"Starting anime TV title sync for TVDB {tvdb_id}")
+
+        # Wait for series to appear in Sonarr
+        series = await self._wait_for_sonarr_series(tvdb_id)
+        if not series:
+            logger.warning(f"Series TVDB {tvdb_id} not found in Sonarr after timeout")
+            return False
+
+        sonarr_id = series.get("id")
+        title = series.get("title", "Unknown")
+
+        # Check if it's anime
+        series_type = series.get("seriesType", "").lower()
+        if series_type != "anime":
+            logger.debug(f"Series '{title}' is not anime type, skipping title sync")
+            return True
+
+        logger.info(f"Detected anime series: '{title}' (Sonarr ID: {sonarr_id})")
+
+        # Fetch alternate titles from TVDB via Sonarr lookup
+        alternate_titles = await self._fetch_series_alternate_titles(tvdb_id)
+        if not alternate_titles:
+            logger.debug(f"No alternate titles found for '{title}'")
+            return True
+
+        logger.info(f"Found {len(alternate_titles)} alternate titles for '{title}'")
+
+        # Add to Sonarr
+        success = await sonarr_client.add_alternate_titles(sonarr_id, alternate_titles)
+        if not success:
+            logger.error(f"Failed to add alternate titles to Sonarr for '{title}'")
+            return False
+
+        # Store in our database
+        await self._store_series_titles(request_id, sonarr_id, alternate_titles)
+
+        logger.info(f"Successfully synced {len(alternate_titles)} alternate titles for '{title}'")
+        return True
+
+    async def _wait_for_sonarr_series(self, tvdb_id: int) -> Optional[dict]:
+        """
+        Poll Sonarr until the series appears.
+        """
+        elapsed = 0
+        while elapsed < SONARR_POLL_TIMEOUT:
+            series = await sonarr_client.get_series_by_tvdb(tvdb_id)
+            if series:
+                return series
+
+            await asyncio.sleep(SONARR_POLL_INTERVAL)
+            elapsed += SONARR_POLL_INTERVAL
+
+        return None
+
+    async def _fetch_series_alternate_titles(self, tvdb_id: int) -> list[str]:
+        """
+        Fetch alternate titles from TVDB via Sonarr lookup.
+        """
+        lookup_data = await sonarr_client.lookup_series(tvdb_id)
+        if not lookup_data:
+            return []
+
+        lookup_titles = lookup_data.get("alternateTitles", [])
+        return [t.get("title") for t in lookup_titles if t.get("title")]
+
+    async def _store_series_titles(
+        self,
+        request_id: int,
+        sonarr_id: int,
+        titles: list[str],
+    ) -> None:
+        """
+        Store alternate titles in our database for a TV series.
+        """
+        stmt = select(MediaRequest).where(MediaRequest.id == request_id)
+        result = await self.db.execute(stmt)
+        request = result.scalar_one_or_none()
+
+        if request:
+            request.alternate_titles = json.dumps(titles)
+            request.is_anime = True
+            request.sonarr_id = sonarr_id
+            await self.db.commit()
+            logger.debug(f"Stored {len(titles)} alternate titles for TV request {request_id}")
+
 
 async def sync_anime_titles_background(
     db_factory,
@@ -207,3 +314,27 @@ async def sync_anime_titles_background(
             await service.sync_movie_titles(request_id, tmdb_id)
     except Exception as e:
         logger.error(f"Error in background anime title sync: {e}")
+
+
+async def sync_anime_series_titles_background(
+    db_factory,
+    request_id: int,
+    tvdb_id: int,
+) -> None:
+    """
+    Background task wrapper for anime TV series title sync.
+
+    Creates its own database session to avoid issues with
+    the original session being closed.
+
+    Args:
+        db_factory: Async session factory (async_session_maker)
+        request_id: Our MediaRequest ID
+        tvdb_id: TVDB series ID
+    """
+    try:
+        async with db_factory() as db:
+            service = AnimeTitleSyncService(db)
+            await service.sync_series_titles(request_id, tvdb_id)
+    except Exception as e:
+        logger.error(f"Error in background anime TV title sync: {e}")

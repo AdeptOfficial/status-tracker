@@ -18,6 +18,7 @@ WHY: Jellyfin's ItemAdded webhook doesn't fire reliably for Shokofin content.
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Optional
@@ -37,6 +38,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def parse_alternate_titles(request: MediaRequest) -> list[str]:
+    """Parse alternate_titles JSON string into list.
+
+    Alternate titles are stored as JSON array string in the database.
+    Used for Japanese/romaji titles that Shokofin may use instead of English.
+    """
+    if not request.alternate_titles:
+        return []
+    try:
+        titles = json.loads(request.alternate_titles)
+        return titles if isinstance(titles, list) else []
+    except (json.JSONDecodeError, TypeError):
+        logger.warning(f"Failed to parse alternate_titles for request {request.id}")
+        return []
+
+
 # Verification timing constants
 INITIAL_DELAY_SECONDS = 10  # Wait for Jellyfin scan to process
 RETRY_DELAY_SECONDS = 15    # Delay between retries
@@ -45,8 +63,10 @@ MAX_RETRIES = 3             # Number of retry attempts
 # Fallback check threshold - requests stuck longer than this get checked
 STUCK_THRESHOLD_MINUTES = 2
 
-# VFS regeneration delay - time to wait after library scan for Shokofin VFS to regenerate
-VFS_REGENERATION_DELAY = 10  # seconds (increased from 3s for reliability)
+# VFS regeneration delay - time to wait for Shokofin to process SignalR events
+# NOTE: We do NOT trigger library scans - they interfere with Shokofin's SignalR processing.
+# Shokofin receives file events from Shoko via SignalR and regenerates VFS automatically.
+VFS_REGENERATION_DELAY = 10  # seconds
 
 
 def is_playable(item: dict) -> bool:
@@ -179,6 +199,14 @@ async def verify_anime_movie(request: MediaRequest, db: "AsyncSession") -> bool:
         logger.info(f"Anime movie '{request.title}' found by title search")
         return await _mark_movie_available(request, item, db, "anime-title-search")
 
+    # Try 5: Alternate titles (for Japanese/romaji titles in Shokofin)
+    alternate_titles = parse_alternate_titles(request)
+    for alt_title in alternate_titles:
+        item = await jellyfin_client.search_by_title(alt_title, request.year)
+        if item and is_playable(item):
+            logger.info(f"Anime movie '{request.title}' found by alternate title '{alt_title}'")
+            return await _mark_movie_available(request, item, db, f"anime-alt-title:{alt_title}")
+
     return False
 
 
@@ -214,6 +242,14 @@ async def verify_anime_tv(request: MediaRequest, db: "AsyncSession") -> bool:
     item = await jellyfin_client.search_by_title(request.title)
     if item and is_playable(item):
         return await _mark_tv_available(request, item, db, "anime-title-search")
+
+    # Try 5: Alternate titles (for Japanese/romaji titles in Shokofin)
+    alternate_titles = parse_alternate_titles(request)
+    for alt_title in alternate_titles:
+        item = await jellyfin_client.search_by_title(alt_title)
+        if item and is_playable(item):
+            logger.info(f"Anime TV '{request.title}' found by alternate title '{alt_title}'")
+            return await _mark_tv_available(request, item, db, f"anime-alt-title:{alt_title}")
 
     return False
 
@@ -399,10 +435,9 @@ async def verify_movie_by_tmdb(tmdb_id: int) -> bool:
     """
     logger.info(f"[MOVIE UPDATED] Starting verification for TMDB {tmdb_id}")
 
-    # Trigger library scan first to ensure VFS is updated
-    await jellyfin_client.trigger_library_scan()
-
-    # Wait for VFS regeneration
+    # Wait a moment for Shokofin to process the SignalR event and regenerate VFS
+    # We do NOT trigger library scans here - that interferes with Shokofin's
+    # SignalR event processing and can cause VFS regeneration to fail.
     await asyncio.sleep(VFS_REGENERATION_DELAY)
 
     async with async_session() as db:
@@ -511,36 +546,29 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
 
     transitioned = []
 
-    # Check SignalR health - if disconnected, trigger scan to force VFS update
+    # NOTE: We intentionally DO NOT trigger library scans here anymore.
+    #
+    # Why? Shokofin uses SignalR to receive file events from Shoko and regenerate
+    # VFS entries. Triggering library scans causes Shokofin to stop/start directory
+    # watching, which can cause SignalR events to be lost or not processed.
+    #
+    # The correct flow is:
+    # 1. Shoko matches file → sends SignalR event → Shokofin regenerates VFS
+    # 2. This fallback loop just polls Jellyfin to check if VFS entry exists
+    # 3. If SignalR is truly broken, Jellyfin restart (not library scan) is needed
+    #
+    # Log SignalR state for debugging but don't trigger scans
     if settings.ENABLE_SHOKO and settings.SHOKO_API_KEY:
         try:
             from app.clients.shoko import get_shoko_client, ConnectionState
             shoko_client = get_shoko_client()
             if shoko_client.state != ConnectionState.CONNECTED:
                 logger.warning(
-                    f"[FALLBACK] Shoko SignalR disconnected (state: {shoko_client.state.value}), "
-                    f"triggering library scan to force VFS regeneration"
+                    f"[FALLBACK] Shoko SignalR disconnected (state: {shoko_client.state.value}). "
+                    f"VFS regeneration may be delayed until reconnection."
                 )
-                await jellyfin_client.trigger_library_scan()
-                await asyncio.sleep(VFS_REGENERATION_DELAY)
         except Exception as e:
             logger.error(f"[FALLBACK] Error checking Shoko SignalR state: {e}")
-
-    # Track if we need to trigger a scan to force Shokofin VFS regeneration
-    # IMPORTING: Regular content waiting for Jellyfin to detect
-    # ANIME_MATCHING: Anime content where Shokofin VFS may not have regenerated
-    anime_matching_requests = [r for r in stuck_requests if r.state == RequestState.ANIME_MATCHING]
-    importing_requests = [r for r in stuck_requests if r.state == RequestState.IMPORTING]
-
-    if anime_matching_requests or importing_requests:
-        logger.info(
-            f"[FALLBACK] Triggering Jellyfin library scan to force VFS regeneration "
-            f"({len(anime_matching_requests)} ANIME_MATCHING, {len(importing_requests)} IMPORTING)"
-        )
-        await jellyfin_client.trigger_library_scan()
-        # Wait for Shokofin VFS regeneration - 3s was too short, increased for reliability
-        logger.debug(f"[FALLBACK] Waiting {VFS_REGENERATION_DELAY}s for VFS regeneration...")
-        await asyncio.sleep(VFS_REGENERATION_DELAY)
 
     for request in stuck_requests:
         try:
