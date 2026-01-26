@@ -341,7 +341,9 @@
                                         <p class="font-medium text-white">
                                             {{ state_labels.get(event.state.value, event.state.value) }}
                                         </p>
-                                        <time class="text-sm text-gray-500 flex-shrink-0">
+                                        <time class="text-sm text-gray-500 flex-shrink-0 local-time"
+                                              data-utc="{{ event.timestamp.isoformat() }}Z"
+                                              data-format="time">
                                             {{ event.timestamp.strftime('%I:%M %p') }}
                                         </time>
                                     </div>

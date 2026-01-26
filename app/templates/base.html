@@ -129,6 +129,32 @@
         }
     </script>
 
+    <!-- Timezone conversion: converts UTC timestamps to local time -->
+    <script>
+        function convertTimestampsToLocal() {
+            document.querySelectorAll('.local-time').forEach(el => {
+                const utc = el.dataset.utc;
+                if (!utc) return;
+
+                const date = new Date(utc);
+                const format = el.dataset.format || 'time'; // 'time', 'datetime', 'date'
+
+                if (format === 'time') {
+                    el.textContent = date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                } else if (format === 'datetime') {
+                    el.textContent = date.toLocaleString([], {
+                        year: 'numeric', month: '2-digit', day: '2-digit',
+                        hour: '2-digit', minute: '2-digit'
+                    });
+                } else if (format === 'date') {
+                    el.textContent = date.toLocaleDateString();
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', convertTimestampsToLocal);
+    </script>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>
