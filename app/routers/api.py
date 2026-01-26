@@ -431,6 +431,55 @@ async def retry_request(
     return MediaRequestResponse.model_validate(request)
 
 
+@router.post("/requests/{request_id}/verify", response_model=MediaRequestResponse)
+async def verify_jellyfin(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Manually verify if media is available in Jellyfin.
+
+    Checks Jellyfin for the media and transitions to AVAILABLE if found.
+    Works for any request state that can transition to AVAILABLE (most states).
+    Use this when a request is stuck but the file is already in Jellyfin.
+    """
+    # Eager load episodes for TV verification
+    stmt = (
+        select(MediaRequest)
+        .options(selectinload(MediaRequest.episodes))
+        .where(MediaRequest.id == request_id)
+    )
+    result = await db.execute(stmt)
+    request = result.scalar_one_or_none()
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    if request.state == RequestState.AVAILABLE:
+        # Already available, just return current state
+        return MediaRequestResponse.model_validate(request)
+
+    previous_state = request.state.value
+
+    # Check if media is in Jellyfin
+    verified = await verify_request(request, db)
+
+    if verified:
+        await db.commit()
+        await broadcaster.broadcast_update(request)
+        logger.info(
+            f"Request {request_id} ({request.title}) verified in Jellyfin, "
+            f"transitioned {previous_state} → AVAILABLE"
+        )
+        return MediaRequestResponse.model_validate(request)
+
+    # Not found in Jellyfin
+    raise HTTPException(
+        status_code=404,
+        detail=f"Media not found in Jellyfin. Request remains in {request.state.value} state."
+    )
+
+
 # ============================================
 # Deletion Endpoints (Admin Only)
 # ============================================
