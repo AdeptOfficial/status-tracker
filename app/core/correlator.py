@@ -24,12 +24,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # States that are considered "active" (not terminal)
+# NOTE: AVAILABLE is intentionally NOT in this list to prevent matching old requests
+# when a new request comes in for the same media.
 ACTIVE_STATES = [
     RequestState.REQUESTED,
     RequestState.APPROVED,
-    RequestState.INDEXED,
+    RequestState.GRABBING,
     RequestState.DOWNLOADING,
-    RequestState.DOWNLOAD_DONE,
+    RequestState.DOWNLOADED,
     RequestState.IMPORTING,
     RequestState.ANIME_MATCHING,
 ]
@@ -81,13 +83,18 @@ class EventCorrelator:
     async def find_by_hash(
         self, db: "AsyncSession", qbit_hash: str
     ) -> Optional[MediaRequest]:
-        """Find request by qBittorrent hash (download tracking)."""
+        """Find active request by qBittorrent hash (download tracking).
+
+        Filters to active states to avoid matching old completed requests
+        if the same torrent is re-downloaded.
+        """
         if not qbit_hash:
             return None
-        # Hash matching is case-insensitive
+        # Hash matching is case-insensitive, filtered to active states
         stmt = select(MediaRequest).where(
             MediaRequest.qbit_hash.ilike(qbit_hash),
-        )
+            MediaRequest.state.in_(ACTIVE_STATES),
+        ).order_by(MediaRequest.created_at.desc())
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 

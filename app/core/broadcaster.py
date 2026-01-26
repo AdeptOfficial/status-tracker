@@ -7,7 +7,7 @@ Used in Part 5 for live dashboard updates without page refresh.
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, AsyncGenerator
+from typing import TYPE_CHECKING, AsyncGenerator, Optional
 
 from app.schemas import MediaRequestResponse, SSEUpdate
 
@@ -15,6 +15,13 @@ if TYPE_CHECKING:
     from app.models import MediaRequest
 
 logger = logging.getLogger(__name__)
+
+# Heartbeat interval to keep SSE connections alive (seconds)
+# Proxies/browsers may timeout idle connections - this prevents that
+SSE_HEARTBEAT_INTERVAL = 15
+
+# Sentinel value for heartbeats
+HEARTBEAT = object()
 
 
 class Broadcaster:
@@ -33,13 +40,14 @@ class Broadcaster:
     def __init__(self):
         self._clients: list[asyncio.Queue] = []
 
-    async def subscribe(self) -> AsyncGenerator[str, None]:
+    async def subscribe(self) -> AsyncGenerator[Optional[dict], None]:
         """
         Subscribe to updates. Returns an async generator for SSE endpoint.
 
-        Yields SSE-formatted strings like:
-            event: update
-            data: {"event_type": "state_change", ...}
+        Yields dicts like:
+            {"event": "update", "data": {...}}
+
+        Or None for heartbeats (SSE endpoint handles these).
         """
         queue: asyncio.Queue = asyncio.Queue()
         self._clients.append(queue)
@@ -47,8 +55,15 @@ class Broadcaster:
 
         try:
             while True:
-                data = await queue.get()
-                yield data
+                try:
+                    # Wait for message with timeout for heartbeat
+                    data = await asyncio.wait_for(
+                        queue.get(), timeout=SSE_HEARTBEAT_INTERVAL
+                    )
+                    yield data
+                except asyncio.TimeoutError:
+                    # No message received within timeout - yield None to signal heartbeat
+                    yield None
         except asyncio.CancelledError:
             pass
         finally:
@@ -61,12 +76,17 @@ class Broadcaster:
 
         Args:
             event_type: SSE event name (e.g., 'update', 'progress')
-            data: Dictionary to JSON-serialize and send
+            data: Dictionary to send
         """
+        client_count = len(self._clients)
+        logger.info(f"Broadcasting '{event_type}' to {client_count} clients")
+
         if not self._clients:
+            logger.warning("No SSE clients connected - update will be lost")
             return
 
-        message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+        # Put structured data in queue (SSE endpoint handles formatting)
+        message = {"event": event_type, "data": data}
 
         # Send to all clients (non-blocking)
         for queue in self._clients:
@@ -87,18 +107,25 @@ class Broadcaster:
             request: The updated MediaRequest
             event_type: Type of update (state_change, progress_update, new_request)
         """
-        # Convert to response schema
-        request_data = MediaRequestResponse.model_validate(request).model_dump(
-            mode="json"
+        logger.info(
+            f"broadcast_update called: request_id={request.id}, "
+            f"title='{request.title}', state='{request.state}', event_type='{event_type}'"
         )
+        try:
+            # Convert to response schema
+            request_data = MediaRequestResponse.model_validate(request).model_dump(
+                mode="json"
+            )
 
-        update = SSEUpdate(
-            event_type=event_type,
-            request_id=request.id,
-            request=request_data,
-        )
+            update = SSEUpdate(
+                event_type=event_type,
+                request_id=request.id,
+                request=request_data,
+            )
 
-        await self.broadcast("update", update.model_dump(mode="json"))
+            await self.broadcast("update", update.model_dump(mode="json"))
+        except Exception as e:
+            logger.error(f"broadcast_update failed for request {request.id}: {e}", exc_info=True)
 
     @property
     def client_count(self) -> int:

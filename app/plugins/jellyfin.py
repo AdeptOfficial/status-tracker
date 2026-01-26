@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Optional
 from app.core.plugin_base import ServicePlugin
 from app.core.correlator import correlator
 from app.core.state_machine import state_machine
-from app.models import MediaRequest, MediaType, RequestState
+from app.models import MediaRequest, MediaType, RequestState, EpisodeState
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,14 +127,18 @@ class JellyfinPlugin(ServicePlugin):
         if not request.year and payload.get("Year"):
             request.year = payload.get("Year")
 
+        # Mark all episodes as available (for TV shows)
+        for episode in request.episodes:
+            episode.state = EpisodeState.AVAILABLE
+
         # Build details string
         details = f"Added to library: {item_name}"
         if item_type == "Episode":
             series = payload.get("SeriesName", "")
             season = payload.get("SeasonNumber", 0)
-            episode = payload.get("EpisodeNumber", 0)
+            ep_num = payload.get("EpisodeNumber", 0)
             if series:
-                details = f"Added: {series} S{season:02d}E{episode:02d}"
+                details = f"Added: {series} S{season:02d}E{ep_num:02d}"
 
         # Transition to AVAILABLE
         await state_machine.transition(

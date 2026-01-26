@@ -7,7 +7,6 @@ from app.services.auth import (
     require_authenticated_user,
     require_admin_user,
     is_admin,
-    get_user_info,
 )
 from app.services.deletion_orchestrator import (
     DeletionOrchestrator,
@@ -25,7 +24,6 @@ __all__ = [
     "require_authenticated_user",
     "require_admin_user",
     "is_admin",
-    "get_user_info",
     "DeletionOrchestrator",
     "delete_request",
     "DeletionVerifier",

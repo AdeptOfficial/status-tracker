@@ -112,15 +112,3 @@ class ServicePlugin(ABC):
             Human-readable string like "WEBDL-1080p from 1337x"
         """
         return ""
-
-    async def on_state_change(
-        self,
-        request: "MediaRequest",
-        old_state: RequestState,
-        new_state: RequestState,
-    ) -> None:
-        """
-        Hook called when any request changes state.
-        Useful for notification plugins (e.g., Gotify).
-        """
-        pass

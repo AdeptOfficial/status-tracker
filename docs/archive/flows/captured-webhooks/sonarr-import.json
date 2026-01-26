@@ -1,0 +1,46 @@
+{
+  "_note": "Season pack import - ONE webhook with ALL episode files",
+  "series": {
+    "id": 23,
+    "title": "Lycoris Recoil",
+    "tvdbId": 414057,
+    "type": "anime",
+    "path": "/data/anime/shows/Lycoris Recoil"
+  },
+  "episodes": [
+    {"id": 739, "episodeNumber": 1, "seasonNumber": 1, "title": "Easy does it"},
+    {"id": 740, "episodeNumber": 2, "seasonNumber": 1, "title": "The more the merrier"},
+    {"id": 741, "episodeNumber": 3, "seasonNumber": 1, "title": "More haste, less speed"},
+    {"id": 742, "episodeNumber": 4, "seasonNumber": 1, "title": "Nothing seek, nothing find"},
+    {"id": 743, "episodeNumber": 5, "seasonNumber": 1, "title": "So far, so good"},
+    {"id": 744, "episodeNumber": 6, "seasonNumber": 1, "title": "Opposites attract"},
+    {"id": 745, "episodeNumber": 7, "seasonNumber": 1, "title": "Time will tell"},
+    {"id": 746, "episodeNumber": 8, "seasonNumber": 1, "title": "Another day, another dollar"},
+    {"id": 747, "episodeNumber": 9, "seasonNumber": 1, "title": "What's done is done"},
+    {"id": 748, "episodeNumber": 10, "seasonNumber": 1, "title": "Repay evil with evil"},
+    {"id": 749, "episodeNumber": 11, "seasonNumber": 1, "title": "Diamond cut diamond"},
+    {"id": 750, "episodeNumber": 12, "seasonNumber": 1, "title": "Nature versus nurture"},
+    {"id": 751, "episodeNumber": 13, "seasonNumber": 1, "title": "Recoil of Lycoris"}
+  ],
+  "episodeFiles": [
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E01.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E01.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E02.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E02.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E03.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E03.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E04.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E04.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E05.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E05.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E06.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E06.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E07.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E07.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E08.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E08.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E09.REPACK.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E09.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E10.REPACK.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E10.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E11.REPACK.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E11.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E12.REPACK.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E12.mkv"},
+    {"relativePath": "Season 1/Lycoris.Recoil.S01E13.REPACK.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE.mkv", "path": "/data/anime/shows/Lycoris Recoil/Season 1/Lycoris.Recoil.S01E13.mkv"}
+  ],
+  "sourcePath": "/data/downloads/complete/Lycoris.Recoil.S01.REPACK.1080p.BluRay.Dual-Audio.Opus2.0.x265-FLE",
+  "destinationPath": "/data/anime/shows/Lycoris Recoil/Season 1",
+  "downloadClient": "qBittorrent (VPN)",
+  "downloadId": "3F92992E2FBEB6EBB251304236BF5E0B600A91C3",
+  "eventType": "Download",
+  "instanceName": "Sonarr"
+}

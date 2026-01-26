@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from fastapi import Header, HTTPException, Depends, Request, Cookie
 
-from app.clients.jellyfin import jellyfin_client, JellyfinUser
+from app.clients.jellyfin import jellyfin_client
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ async def get_current_user(
         @app.get("/endpoint")
         async def endpoint(user: Optional[AuthenticatedUser] = Depends(get_current_user)):
             if user:
-                print(f"Hello {user.username}")
+                logger.info(f"Hello {user.username}")
     """
     # Check header first, then cookie
     token = x_jellyfin_token or jellyfin_token
@@ -80,7 +80,7 @@ async def require_authenticated_user(
     Usage:
         @app.get("/protected")
         async def protected(user: AuthenticatedUser = Depends(require_authenticated_user)):
-            print(f"Hello {user.username}")
+            logger.info(f"Hello {user.username}")
     """
     if not user:
         raise HTTPException(
@@ -101,7 +101,7 @@ async def require_admin_user(
     Usage:
         @app.delete("/admin-only")
         async def admin_only(user: AuthenticatedUser = Depends(require_admin_user)):
-            print(f"Admin {user.username} is performing action")
+            logger.info(f"Admin {user.username} is performing action")
     """
     if not user.is_admin:
         logger.warning(f"Non-admin user {user.username} ({user.user_id}) attempted admin action")
@@ -119,12 +119,3 @@ def is_admin(user_id: str) -> bool:
     This is a synchronous helper for use in templates/non-async contexts.
     """
     return user_id in settings.admin_user_ids_list
-
-
-async def get_user_info(user_id: str) -> Optional[JellyfinUser]:
-    """
-    Get user info by Jellyfin user ID.
-
-    Useful for resolving usernames in audit logs.
-    """
-    return await jellyfin_client.get_user_by_id(user_id)

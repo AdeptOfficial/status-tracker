@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, func, distinct
@@ -70,15 +70,17 @@ async def index(
     active_states = [
         RequestState.REQUESTED,
         RequestState.APPROVED,
-        RequestState.INDEXED,
+        RequestState.GRABBING,
         RequestState.DOWNLOADING,
-        RequestState.DOWNLOAD_DONE,
+        RequestState.DOWNLOADED,
         RequestState.IMPORTING,
         RequestState.ANIME_MATCHING,
+        RequestState.MATCH_FAILED,  # Show in UI so users can notify admin
     ]
 
     stmt = (
         select(MediaRequest)
+        .options(selectinload(MediaRequest.episodes))
         .where(MediaRequest.state.in_(active_states))
         .order_by(MediaRequest.updated_at.desc())
     )
@@ -121,8 +123,8 @@ async def history(
         RequestState.TIMEOUT,
     ]
 
-    # Build base query
-    stmt = select(MediaRequest)
+    # Build base query with eager loading for episodes (used by card.html)
+    stmt = select(MediaRequest).options(selectinload(MediaRequest.episodes))
 
     # Apply state filter if provided (otherwise show all terminal states)
     if state_filter and state_filter in ['available', 'failed', 'timeout']:
@@ -192,7 +194,10 @@ async def request_detail(
     """
     stmt = (
         select(MediaRequest)
-        .options(selectinload(MediaRequest.timeline_events))
+        .options(
+            selectinload(MediaRequest.timeline_events),
+            selectinload(MediaRequest.episodes),
+        )
         .where(MediaRequest.id == request_id)
     )
 

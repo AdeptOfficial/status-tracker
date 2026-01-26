@@ -125,7 +125,9 @@
                                 {{ deletion_status_labels.get(log.status.value, log.status.value) }}
                             </span>
                         </td>
-                        <td class="px-4 py-3 text-gray-400 text-sm">
+                        <td class="px-4 py-3 text-gray-400 text-sm local-time"
+                            data-utc="{{ log.initiated_at.isoformat() }}Z"
+                            data-format="datetime">
                             {{ log.initiated_at.strftime('%Y-%m-%d %H:%M') }}
                         </td>
                         <td class="px-4 py-3">

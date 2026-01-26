@@ -1,0 +1,44 @@
+{
+  "eventType": "Download",
+  "movie": {
+    "id": 51,
+    "title": "Violet Evergarden: Recollections",
+    "year": 2021,
+    "releaseDate": "2022-01-27",
+    "folderPath": "/data/anime/movies/Violet Evergarden - Recollections (2021)",
+    "tmdbId": 1052946,
+    "imdbId": "tt25041020",
+    "genres": ["Science Fiction", "Drama", "Fantasy", "Animation", "Romance"],
+    "tags": ["anime"],
+    "originalLanguage": {"id": 8, "name": "Japanese"}
+  },
+  "remoteMovie": {
+    "tmdbId": 1052946,
+    "imdbId": "tt25041020",
+    "title": "Violet Evergarden: Recollections",
+    "year": 2021
+  },
+  "movieFile": {
+    "id": 36,
+    "relativePath": "Violet.Evergarden.Recollections.2022.1080p.NF.WEB-DL.AAC2.0.x264-GST.mkv",
+    "path": "/data/anime/movies/Violet Evergarden - Recollections (2021)/Violet.Evergarden.Recollections.2022.1080p.NF.WEB-DL.AAC2.0.x264-GST.mkv",
+    "quality": "WEBDL-1080p",
+    "qualityVersion": 1,
+    "releaseGroup": "GST",
+    "size": 3725336767,
+    "dateAdded": "2026-01-22T04:36:40.2551822Z",
+    "languages": [{"id": 8, "name": "Japanese"}],
+    "mediaInfo": {
+      "audioChannels": 2.0,
+      "audioCodec": "AAC",
+      "height": 1080,
+      "width": 1920
+    }
+  },
+  "sourcePath": "/data/downloads/complete/Violet.Evergarden.Recollections.2022.1080p.NF.WEB-DL.AAC2.0.x264-GST.mkv",
+  "destinationPath": "/data/anime/movies/Violet Evergarden - Recollections (2021)/Violet.Evergarden.Recollections.2022.1080p.NF.WEB-DL.AAC2.0.x264-GST.mkv",
+  "downloadClient": "qBittorrent (VPN)",
+  "downloadClientType": "qBittorrent",
+  "downloadId": "327CCE10156316F79C005B0E953B9E8498E066EB",
+  "instanceName": "Radarr"
+}

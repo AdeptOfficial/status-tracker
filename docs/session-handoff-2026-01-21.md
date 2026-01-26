@@ -1,62 +1,80 @@
 # Session Handoff: Status-Tracker Architecture Redesign
 
-**Date:** 2026-01-21
+**Date:** 2026-01-21 (Updated)
 **Branch:** `fix/media-workflow-audit` in `~/git/status-tracker-workflow-fix/`
 
 ## Current Task
 
-Redesigning status-tracker architecture to fix fundamental flow issues. User wants to dive deep into **Request Addition** flow.
+Redesigning status-tracker architecture. Documenting all 5 phases with flow diagrams, current implementation bugs, and fixes.
 
-## Key Documents Created
+## Progress
 
-1. `~/git/status-tracker-workflow-fix/docs/media-workflow-audit.md` - Bug findings from testing
-2. `~/git/status-tracker-workflow-fix/docs/flow-redesign-plan.md` - Flow divergence analysis
-3. `~/git/status-tracker-workflow-fix/docs/architecture-v2.md` - **MAIN DOC** - Full architecture
+| Phase | Status | Key Changes |
+|-------|--------|-------------|
+| Phase 1 - Request Creation | ✅ Done | Year parsing, poster URL fix, duplicate handling |
+| Phase 2 - Indexer Grab | ✅ Done | GRABBING state for TV, qbit_hashes array, episode tracking |
+| Phase 3 - Download Progress | 🔄 In Progress | Started reading, need to update for multi-hash TV |
+| Phase 4 - Import | ⏳ Pending | |
+| Phase 5 - Verification | ⏳ Pending | |
 
-## Bugs Found During Testing
+## Key Documents Created/Updated
 
-| # | Bug | Impact |
-|---|-----|--------|
-| 1 | Correlation matches wrong request | Webhooks update old AVAILABLE request instead of new one |
-| 2 | TV fallback missing | `media_type == "movie"` filter + no TVDB lookup |
-| 3 | Anime ID mismatch | Shoko uses AniDB, we search by TMDB |
-| 4 | Poster URL missing | Not fetched from TMDB |
-| 5 | Library sync phantom requests | Creates requests user didn't make |
+1. `~/git/status-tracker-workflow-fix/docs/MVP.md` - **MVP definition**
+2. `~/git/status-tracker-workflow-fix/docs/flows/README.md` - Flow overview
+3. `~/git/status-tracker-workflow-fix/docs/flows/database.md` - **Schema with states**
+4. `~/git/status-tracker-workflow-fix/docs/flows/phase-1-request-creation.md` - ✅ Complete
+5. `~/git/status-tracker-workflow-fix/docs/flows/phase-2-indexer-grab.md` - ✅ Complete
+6. `~/git/status-tracker-workflow-fix/docs/flows/phase-3-download-progress.md` - 🔄 Needs update
+7. `~/git/status-tracker-workflow-fix/docs/features/sse-live-updates.md` - SSE spec (post-MVP)
 
-## Architecture Overview (4 Paths)
+## Finalized States
 
 ```
-COMMON:  Jellyseerr → APPROVED → Grab → INDEXED → DOWNLOADING → IMPORTING
-                                                                    │
-         ┌──────────────────┬──────────────────┬────────────────────┤
-         ▼                  ▼                  ▼                    ▼
-    Regular Movie      Regular TV        Anime Movie           Anime TV
-    (TMDB lookup)     (TVDB lookup)    (TMDB + Shoko)       (TVDB + Shoko)
+REQUESTED      ← User requested, awaiting admin approval
+APPROVED       ← Approved, waiting for Radarr/Sonarr to grab
+GRABBING       ← TV only: grabbing episodes ("Grabbed 3/12 eps")
+DOWNLOADING    ← qBit downloading
+DOWNLOAD_DONE  ← qBit complete, waiting for import (debug stuck imports)
+IMPORTING      ← Radarr/Sonarr importing to library
+ANIME_MATCHING ← Anime only: waiting for Shoko to match
+AVAILABLE      ← In Jellyfin, ready to watch
+FAILED         ← Error occurred (for debugging)
 ```
 
-## Request Addition Phases (from architecture-v2.md)
+**Key decisions:**
+- Movies skip GRABBING (single file)
+- TV uses GRABBING with episode count ("3/12 eps")
+- DOWNLOAD_DONE kept for debugging stuck imports
+- `qbit_hash` → `qbit_hashes` (JSON array for TV with multiple episode hashes)
 
-1. **Request Creation** - Jellyseerr webhook → create request
-2. **Indexer Grab** - Radarr/Sonarr Grab → store download_id (qbit hash)
-3. **Download Progress** - qBit polling → update progress
-4. **Import** - Radarr/Sonarr Import → store final_path, DIVERGE here
-5. **Verification** - Different per path (TMDB/TVDB/Shoko lookup)
+## Database Schema Changes
 
-## Key Correlation Fix Needed
-
-```python
-# CURRENT (broken): Finds ANY request, even AVAILABLE ones
-request = await correlator.find_by_any(db, tmdb_id=tmdb_id)
-
-# PROPOSED: Prioritize by download_id, exclude completed requests
-request = await correlator.find_active_by_any(
-    db,
-    download_id=download_id,  # PRIMARY - unique per download
-    tmdb_id=tmdb_id,
-    exclude_states=[RequestState.AVAILABLE, RequestState.DELETED],
-    order_by="created_at DESC",
-)
 ```
+# Changed
+qbit_hash → qbit_hashes (JSON array)
+
+# Added
+grabbed_episodes     ← TV: count grabbed
+downloaded_episodes  ← TV: count downloaded
+imported_episodes    ← TV: count imported
+total_episodes       ← TV: target count
+```
+
+## Bugs Documented
+
+| Bug | Location | Status |
+|-----|----------|--------|
+| Poster URL wrong field | jellyseerr.py | Documented |
+| Correlation no state filtering | correlator.py, radarr.py, sonarr.py | Documented |
+| Year not extracted | jellyseerr.py | Documented |
+| TV fallback missing | jellyfin_verifier.py | Documented |
+| Sonarr only stores first episode | sonarr.py | Documented |
+| Single qbit_hash field | models.py | Documented |
+
+## MVP Scope
+
+**In:** 4 flows working, state tracking, correlation fix, fallback checker
+**Out:** SSE live updates, download progress %, per-episode tracking
 
 ## Security Protocols
 
@@ -64,15 +82,15 @@ request = await correlator.find_active_by_any(
 - Never run `printenv`, `env`, `docker inspect`, `docker-compose config`
 - SSH access: `ssh root@10.0.2.10` then `pct enter 220` for media LXC
 
-## Next Step
+## Next Steps
 
-User wants to **dive deep into Request Addition** - hammer out the exact steps for all 4 paths, especially:
-- What data comes from each webhook
-- What correlation keys to use at each step
-- How to handle edge cases
+1. [ ] Update Phase 3 doc for multi-hash TV handling
+2. [ ] Document Phase 4 (Import)
+3. [ ] Document Phase 5 (Verification - 4 paths)
+4. [ ] Capture live Sonarr Grab webhook (nice-to-have)
 
-## Files to Read
+## Files to Read First
 
-1. `~/git/status-tracker-workflow-fix/docs/architecture-v2.md` - Full architecture
-2. `~/git/status-tracker-workflow-fix/app/core/correlator.py` - Current correlator code
-3. `~/git/status-tracker-workflow-fix/app/plugins/` - Webhook handlers
+1. `~/git/status-tracker-workflow-fix/docs/MVP.md` - What "done" looks like
+2. `~/git/status-tracker-workflow-fix/docs/flows/database.md` - Schema with states
+3. `~/git/status-tracker-workflow-fix/docs/flows/phase-2-indexer-grab.md` - Most recent work
