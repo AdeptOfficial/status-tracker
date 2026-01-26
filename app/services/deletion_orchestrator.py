@@ -33,7 +33,6 @@ from app.clients.radarr import radarr_client
 from app.clients.jellyfin import jellyfin_client
 from app.clients.jellyseerr import jellyseerr_client
 from app.clients.shoko import shoko_http_client
-from app.clients.qbittorrent import QBittorrentClient
 from app.core.broadcaster import broadcaster
 from app.config import settings
 
@@ -129,11 +128,8 @@ class DeletionOrchestrator:
             username=username,
         )
 
-        # Try to resolve any missing service IDs via TMDB/TVDB lookups
-        await self._resolve_missing_ids(deletion_log)
-
         # Determine all services and their applicability
-        services_info = self._determine_services_from_log(deletion_log, skip_services)
+        services_info = self._determine_services(request, skip_services)
         services_to_sync = self._get_services_to_sync(services_info)
 
         # Create initial events for ALL services (not just those to sync)
@@ -239,9 +235,9 @@ class DeletionOrchestrator:
             radarr_id=request.radarr_id,
             shoko_series_id=request.shoko_series_id,
             jellyseerr_id=request.jellyseerr_id,
-            qbit_hash=request.qbit_hash,
             poster_url=request.poster_url,
             year=year,
+            is_anime=request.is_anime,  # Store for Shoko sync determination
             source=source,
             deleted_by_user_id=user_id,
             deleted_by_username=resolved_username,
@@ -251,44 +247,6 @@ class DeletionOrchestrator:
         self.db.add(deletion_log)
         await self.db.flush()  # Get the ID
         return deletion_log
-
-    async def _resolve_missing_ids(self, deletion_log: DeletionLog) -> None:
-        """
-        Attempt to resolve missing service IDs by TMDB/TVDB lookup.
-
-        When a request doesn't have all service IDs stored, we can often
-        find them by looking up via TMDB/TVDB IDs. This enables deletion
-        sync even when IDs weren't captured during request creation.
-        """
-        # Jellyfin: lookup by tmdb_id if jellyfin_id missing
-        if not deletion_log.jellyfin_id and deletion_log.tmdb_id:
-            media_type = "Movie" if deletion_log.media_type == MediaType.MOVIE else "Series"
-            item = await jellyfin_client.find_item_by_tmdb(deletion_log.tmdb_id, media_type)
-            if item:
-                deletion_log.jellyfin_id = item.get("Id")
-                logger.info(f"Resolved Jellyfin ID {deletion_log.jellyfin_id} from TMDB {deletion_log.tmdb_id}")
-
-        # Jellyseerr: lookup by tmdb_id if jellyseerr_id missing
-        if not deletion_log.jellyseerr_id and deletion_log.tmdb_id:
-            media_type = "movie" if deletion_log.media_type == MediaType.MOVIE else "tv"
-            request = await jellyseerr_client.get_request_by_tmdb(deletion_log.tmdb_id, media_type)
-            if request:
-                deletion_log.jellyseerr_id = request.get("id")
-                logger.info(f"Resolved Jellyseerr ID {deletion_log.jellyseerr_id} from TMDB {deletion_log.tmdb_id}")
-
-        # Sonarr: lookup by tvdb_id if sonarr_id missing (TV only)
-        if not deletion_log.sonarr_id and deletion_log.tvdb_id:
-            series = await sonarr_client.get_series_by_tvdb(deletion_log.tvdb_id)
-            if series:
-                deletion_log.sonarr_id = series.get("id")
-                logger.info(f"Resolved Sonarr ID {deletion_log.sonarr_id} from TVDB {deletion_log.tvdb_id}")
-
-        # Radarr: lookup by tmdb_id if radarr_id missing (Movie only)
-        if not deletion_log.radarr_id and deletion_log.tmdb_id and deletion_log.media_type == MediaType.MOVIE:
-            movie = await radarr_client.get_movie_by_tmdb(deletion_log.tmdb_id)
-            if movie:
-                deletion_log.radarr_id = movie.get("id")
-                logger.info(f"Resolved Radarr ID {deletion_log.radarr_id} from TMDB {deletion_log.tmdb_id}")
 
     async def _add_sync_event(
         self,
@@ -332,12 +290,6 @@ class DeletionOrchestrator:
         is_movie = request.media_type == MediaType.MOVIE
 
         services = {
-            # qBittorrent - applicable if we have a torrent hash
-            "qbittorrent": {
-                "applicable": request.qbit_hash is not None,
-                "has_id": request.qbit_hash is not None,
-                "skip": "qbittorrent" in skip_services,
-            },
             # Sonarr only for TV shows
             "sonarr": {
                 "applicable": is_tv,
@@ -350,10 +302,11 @@ class DeletionOrchestrator:
                 "has_id": request.radarr_id is not None,
                 "skip": "radarr" in skip_services,
             },
-            # Shoko only for anime (has shoko_series_id)
+            # Shoko for anime content (check is_anime flag, not just shoko_series_id)
+            # Shoko may have entries even without shoko_series_id being tracked
             "shoko": {
-                "applicable": request.shoko_series_id is not None,
-                "has_id": request.shoko_series_id is not None,
+                "applicable": request.is_anime,
+                "has_id": True,  # Shoko uses RemoveMissingFiles scan, doesn't need specific ID
                 "skip": "shoko" in skip_services,
             },
             # Jellyfin always applicable
@@ -366,55 +319,6 @@ class DeletionOrchestrator:
             "jellyseerr": {
                 "applicable": True,
                 "has_id": request.jellyseerr_id is not None,
-                "skip": "jellyseerr" in skip_services,
-            },
-        }
-
-        return services
-
-    def _determine_services_from_log(
-        self,
-        deletion_log: DeletionLog,
-        skip_services: list[str],
-    ) -> dict[str, dict]:
-        """
-        Determine ALL services and their applicability from a DeletionLog.
-
-        Similar to _determine_services but uses DeletionLog which may have
-        IDs resolved via TMDB/TVDB lookups after initial creation.
-        """
-        is_tv = deletion_log.media_type == MediaType.TV
-        is_movie = deletion_log.media_type == MediaType.MOVIE
-
-        services = {
-            "qbittorrent": {
-                "applicable": deletion_log.qbit_hash is not None,
-                "has_id": deletion_log.qbit_hash is not None,
-                "skip": "qbittorrent" in skip_services,
-            },
-            "sonarr": {
-                "applicable": is_tv,
-                "has_id": deletion_log.sonarr_id is not None,
-                "skip": "sonarr" in skip_services,
-            },
-            "radarr": {
-                "applicable": is_movie,
-                "has_id": deletion_log.radarr_id is not None,
-                "skip": "radarr" in skip_services,
-            },
-            "shoko": {
-                "applicable": deletion_log.shoko_series_id is not None,
-                "has_id": deletion_log.shoko_series_id is not None,
-                "skip": "shoko" in skip_services,
-            },
-            "jellyfin": {
-                "applicable": True,
-                "has_id": deletion_log.jellyfin_id is not None,
-                "skip": "jellyfin" in skip_services,
-            },
-            "jellyseerr": {
-                "applicable": True,
-                "has_id": deletion_log.jellyseerr_id is not None,
                 "skip": "jellyseerr" in skip_services,
             },
         }
@@ -435,10 +339,8 @@ class DeletionOrchestrator:
         delete_files: bool,
     ):
         """Sync deletion to external services."""
-        # Order: qBittorrent first (stop torrent), then Sonarr/Radarr (deletes files), then Shoko, Jellyfin, Jellyseerr
+        # Order: Sonarr/Radarr first (deletes files), then Shoko, Jellyfin, Jellyseerr
         ordered_services = []
-        if "qbittorrent" in services:
-            ordered_services.append("qbittorrent")
         if "sonarr" in services:
             ordered_services.append("sonarr")
         if "radarr" in services:
@@ -477,12 +379,7 @@ class DeletionOrchestrator:
         message = ""
 
         try:
-            if service == "qbittorrent" and deletion_log.qbit_hash:
-                async with QBittorrentClient() as qbit:
-                    success, message = await qbit.delete_torrent(
-                        deletion_log.qbit_hash, delete_files=delete_files
-                    )
-            elif service == "sonarr" and deletion_log.sonarr_id:
+            if service == "sonarr" and deletion_log.sonarr_id:
                 success, message = await sonarr_client.delete_series(
                     deletion_log.sonarr_id, delete_files=delete_files
                 )
@@ -490,10 +387,9 @@ class DeletionOrchestrator:
                 success, message = await radarr_client.delete_movie(
                     deletion_log.radarr_id, delete_files=delete_files
                 )
-            elif service == "shoko" and deletion_log.shoko_series_id:
+            elif service == "shoko" and deletion_log.is_anime:
                 if delete_files:
-                    # Trigger Shoko to scan for and remove missing file entries
-                    # This is a global operation - Shoko doesn't support per-series removal
+                    # Trigger Shoko to scan and remove missing file entries
                     success, message = await shoko_http_client.remove_missing_files()
                 else:
                     # Files kept on disk - skip Shoko
@@ -521,18 +417,36 @@ class DeletionOrchestrator:
                     )
                     await self.db.commit()
                     return  # Early return - don't go through normal success/fail flow
-            elif service == "jellyseerr" and deletion_log.jellyseerr_id:
-                success, message = await jellyseerr_client.delete_request(
-                    deletion_log.jellyseerr_id
+            elif service == "jellyseerr":
+                # Jellyseerr has two entities: requests (who asked for it) and media (availability).
+                # We need to delete both to fully clear the "Available" status.
+                messages = []
+
+                # Step 1: Delete the request record (if we have the ID)
+                if deletion_log.jellyseerr_id:
+                    req_success, req_msg = await jellyseerr_client.delete_request(
+                        deletion_log.jellyseerr_id
+                    )
+                    messages.append(f"Request: {req_msg}")
+                else:
+                    req_success = True
+                    messages.append("Request: No ID (skipped)")
+
+                # Step 2: Delete the media entry to clear "Available" status
+                # Look up by TMDB ID since we don't store mediaInfo.id
+                media_type_str = "movie" if deletion_log.media_type == MediaType.MOVIE else "tv"
+                media_id = await jellyseerr_client.get_media_id_by_tmdb(
+                    deletion_log.tmdb_id, media_type_str
                 )
-                # After deleting request, trigger library sync to clear stale "available" cache
-                if success:
-                    sync_triggered = await jellyseerr_client.trigger_library_sync()
-                    if sync_triggered:
-                        message = f"{message} (library sync triggered)"
-                    else:
-                        # Non-fatal - request was deleted, sync just didn't trigger
-                        logger.warning("Jellyseerr request deleted but library sync failed to trigger")
+                if media_id:
+                    media_success, media_msg = await jellyseerr_client.delete_media(media_id)
+                    messages.append(f"Media: {media_msg}")
+                else:
+                    media_success = True
+                    messages.append("Media: No entry found (already cleared)")
+
+                success = req_success and media_success
+                message = "; ".join(messages)
             else:
                 success = True
                 message = "No ID available for this service"

@@ -1,0 +1,54 @@
+{
+  "series": {
+    "id": 23,
+    "title": "Lycoris Recoil",
+    "titleSlug": "lycoris-recoil",
+    "path": "/data/anime/shows/Lycoris Recoil",
+    "tvdbId": 414057,
+    "tvMazeId": 62715,
+    "tmdbId": 154494,
+    "imdbId": "tt16755706",
+    "type": "anime",
+    "year": 2022,
+    "genres": ["Action", "Animation", "Anime", "Comedy"],
+    "images": [
+      {"coverType": "banner", "url": "/MediaCover/23/banner.jpg", "remoteUrl": "https://artworks.thetvdb.com/..."},
+      {"coverType": "poster", "url": "/MediaCover/23/poster.jpg", "remoteUrl": "https://artworks.thetvdb.com/..."},
+      {"coverType": "fanart", "url": "/MediaCover/23/fanart.jpg", "remoteUrl": "https://artworks.thetvdb.com/..."}
+    ],
+    "tags": [],
+    "originalLanguage": {"id": 8, "name": "Japanese"}
+  },
+  "episodes": [
+    {"id": 739, "episodeNumber": 1, "seasonNumber": 1, "title": "Easy does it", "tvdbId": 8916235},
+    {"id": 740, "episodeNumber": 2, "seasonNumber": 1, "title": "The more the merrier", "tvdbId": 9234918},
+    {"id": 741, "episodeNumber": 3, "seasonNumber": 1, "title": "More haste, less speed", "tvdbId": 9234919},
+    {"id": 742, "episodeNumber": 4, "seasonNumber": 1, "title": "Nothing seek, nothing find", "tvdbId": 9234920},
+    {"id": 743, "episodeNumber": 5, "seasonNumber": 1, "title": "So far, so good", "tvdbId": 9242981},
+    {"id": 744, "episodeNumber": 6, "seasonNumber": 1, "title": "Opposites attract", "tvdbId": 9242982},
+    {"id": 745, "episodeNumber": 7, "seasonNumber": 1, "title": "Time will tell", "tvdbId": 9242983},
+    {"id": 746, "episodeNumber": 8, "seasonNumber": 1, "title": "Another day, another dollar", "tvdbId": 9242984},
+    {"id": 747, "episodeNumber": 9, "seasonNumber": 1, "title": "What's done is done", "tvdbId": 9242985},
+    {"id": 748, "episodeNumber": 10, "seasonNumber": 1, "title": "Repay evil with evil", "tvdbId": 9242986},
+    {"id": 749, "episodeNumber": 11, "seasonNumber": 1, "title": "Diamond cut diamond", "tvdbId": 9242987},
+    {"id": 750, "episodeNumber": 12, "seasonNumber": 1, "title": "Nature versus nurture", "tvdbId": 9242988},
+    {"id": 751, "episodeNumber": 13, "seasonNumber": 1, "title": "Recoil of Lycoris", "tvdbId": 9242989}
+  ],
+  "release": {
+    "quality": "Bluray-1080p",
+    "qualityVersion": 2,
+    "releaseGroup": "FLE",
+    "releaseTitle": "[FLE] Lycoris Recoil - S01 REPACK (BD 1080p HEVC x265 Opus) [Dual Audio]",
+    "indexer": "Nyaa.si (Prowlarr)",
+    "size": 33930242048,
+    "customFormatScore": 200,
+    "customFormats": ["Anime Dual Audio", "Repack/Proper", "x265 (HD)"],
+    "languages": [{"id": 8, "name": "Japanese"}]
+  },
+  "downloadClient": "qBittorrent (VPN)",
+  "downloadClientType": "qBittorrent",
+  "downloadId": "3F92992E2FBEB6EBB251304236BF5E0B600A91C3",
+  "eventType": "Grab",
+  "instanceName": "Sonarr",
+  "applicationUrl": ""
+}

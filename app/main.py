@@ -17,17 +17,29 @@ from app.plugins import load_plugins, get_all_plugins
 from app.routers import webhooks_router, api_router, pages_router, sse_router
 from app.core.broadcaster import broadcaster
 
-# Configure logging
+# Configure logging from environment
+log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
+# Enable DEBUG logging for specific modules when needed
+if log_level == logging.DEBUG:
+    # These modules benefit from DEBUG logging during troubleshooting
+    logging.getLogger("app.clients.shoko").setLevel(logging.DEBUG)
+    logging.getLogger("app.clients.jellyseerr").setLevel(logging.DEBUG)
+    logging.getLogger("app.plugins.jellyseerr").setLevel(logging.DEBUG)
+    logging.getLogger("app.plugins.sonarr").setLevel(logging.DEBUG)
+else:
+    # Shoko always at DEBUG for event visibility (high volume but useful)
+    logging.getLogger("app.clients.shoko").setLevel(logging.DEBUG)
+
 # Shoko SignalR imports (conditional)
 if settings.ENABLE_SHOKO:
     from app.clients.shoko import get_shoko_client
-    from app.plugins.shoko import handle_shoko_file_matched
+    from app.plugins.shoko import handle_shoko_file_matched, handle_shoko_file_not_matched
 
 # Timeout checker imports (conditional)
 if settings.ENABLE_TIMEOUT_CHECKER:
@@ -62,11 +74,22 @@ async def shoko_signalr_loop():
         async with async_session() as db:
             try:
                 await handle_shoko_file_matched(event, db)
+                await db.commit()
             except Exception as e:
                 logger.error(f"Error handling Shoko event: {e}")
                 await db.rollback()
 
+    async def on_file_not_matched(event):
+        async with async_session() as db:
+            try:
+                await handle_shoko_file_not_matched(event, db)
+                await db.commit()
+            except Exception as e:
+                logger.error(f"Error handling Shoko FileNotMatched event: {e}")
+                await db.rollback()
+
     client.on_file_matched(on_file_matched)
+    client.on_file_not_matched(on_file_not_matched)
 
     # Run the client (handles reconnection internally)
     await client.start()
@@ -77,10 +100,16 @@ async def polling_loop():
     Background task that polls plugins for updates.
 
     Runs continuously, calling poll() on each plugin that requires it.
+
+    Uses adaptive polling:
+    - 5 seconds when there are active downloads
+    - 30 seconds when idle (no active downloads)
     """
     logger.info("Starting polling loop...")
 
     while True:
+        interval = 30  # Default to slow polling
+
         try:
             # Get plugins that need polling
             plugins = [p for p in get_all_plugins() if p.requires_polling]
@@ -91,22 +120,26 @@ async def polling_loop():
                         try:
                             updated_requests = await plugin.poll(db)
 
-                            # Broadcast updates for any changed requests
+                            await db.commit()
+
+                            # Broadcast AFTER commit so frontend fetches committed data
                             for request in updated_requests:
                                 await broadcaster.broadcast_update(request)
-
-                            await db.commit()
 
                         except Exception as e:
                             logger.error(f"Error polling {plugin.name}: {e}")
                             await db.rollback()
 
+                    # Get adaptive interval after polling (while we still have db session)
+                    # Check if any plugin supports adaptive polling
+                    for plugin in plugins:
+                        if hasattr(plugin, "get_adaptive_poll_interval"):
+                            interval = await plugin.get_adaptive_poll_interval(db)
+                            break
+
         except Exception as e:
             logger.error(f"Polling loop error: {e}")
 
-        # Wait for the poll interval (use shortest interval from plugins)
-        polling_plugins = [p for p in get_all_plugins() if p.requires_polling]
-        interval = min((p.poll_interval for p in polling_plugins), default=5)
         await asyncio.sleep(interval)
 
 
@@ -129,6 +162,7 @@ async def timeout_checker_loop():
             async with async_session() as db:
                 timed_out = await check_timeouts(db)
                 if timed_out:
+                    await db.commit()
                     logger.info(f"Timeout checker marked {len(timed_out)} requests")
 
         except Exception as e:
@@ -153,6 +187,7 @@ async def jellyfin_fallback_loop():
             async with async_session() as db:
                 transitioned = await check_anime_matching_fallback(db)
                 if transitioned:
+                    await db.commit()
                     logger.info(f"Fallback checker transitioned {len(transitioned)} requests")
 
         except Exception as e:

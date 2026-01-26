@@ -23,6 +23,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - TZ=${TZ:-America/Chicago}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATABASE_URL=sqlite:////config/tracker.db
       # qBittorrent accessed via Gluetun (shares network namespace)
       - QBIT_HOST=gluetun
@@ -38,6 +39,8 @@ services:
       - SHOKO_HOST=${SHOKO_HOST:-shoko}
       - SHOKO_PORT=${SHOKO_PORT:-8111}
       - SHOKO_API_KEY=${SHOKO_API_KEY:-}
+      # Media path prefix for Shoko path matching (should match Shoko import folder)
+      - MEDIA_PATH_PREFIX=${MEDIA_PATH_PREFIX:-/data}
       # Timeout checker settings
       - ENABLE_TIMEOUT_CHECKER=${ENABLE_TIMEOUT_CHECKER:-true}
       - DOWNLOADING_TIMEOUT=${DOWNLOADING_TIMEOUT:-1440}

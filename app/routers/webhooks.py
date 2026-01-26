@@ -56,7 +56,6 @@ async def handle_webhook(
         payload = dict(form)
 
     logger.info(f"Webhook received: {service} - {payload.get('eventType', payload.get('notification_type', 'unknown'))}")
-    logger.debug(f"Payload: {payload}")
 
     # Process with plugin
     try:
@@ -67,7 +66,12 @@ async def handle_webhook(
 
         # Broadcast update if a request was affected
         if media_request:
-            await broadcaster.broadcast_update(media_request)
+            # Refresh to reload attributes after commit (prevents detached instance errors)
+            await db.refresh(media_request)
+            # Check if this is a newly created request (flag set by plugin)
+            is_new = getattr(media_request, '_is_new', False)
+            event_type = "new_request" if is_new else "state_change"
+            await broadcaster.broadcast_update(media_request, event_type=event_type)
 
         return {
             "status": "processed",

@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     Same image for dev/prod, just change env vars.
     """
 
+    # Logging
+    LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR
+
     # Database
     DATABASE_URL: str = "sqlite:///config/tracker.db"
 
@@ -30,6 +33,11 @@ class Settings(BaseSettings):
 
     # Polling interval for download progress
     POLL_INTERVAL: int = 5
+
+    # Media path prefix (for matching Shoko relative paths to Sonarr/Radarr final paths)
+    # Shoko reports: anime/shows/Title/Season 1/file.mkv
+    # Sonarr stores: /data/anime/shows/Title/Season 1/file.mkv
+    MEDIA_PATH_PREFIX: str = "/data"
 
     # Feature flags (for optional plugins)
     ENABLE_SHOKO: bool = True

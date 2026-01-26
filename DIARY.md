@@ -2,109 +2,101 @@
 
 Development log for the status-tracker project. New entries at the top.
 
----
-
-## Roadmap / Next Priorities
-
-**For future agents - work on these in order:**
-
-| Priority | Task | Issue/Notes |
-|----------|------|-------------|
-| 1 | **Test anime TV shows** | Flow may differ from movies. Sonarr handles shows differently. See `issues/design-separate-anime-movie-show-flows.md` |
-| 2 | **Fix delete integration** | Multiple gaps in deletion sync. See `issues/deletion-integration-gaps.md` |
-
-**Current working state (2026-01-21):**
-- ✅ Anime movies: Full flow working (REQUESTED → AVAILABLE)
-- ✅ Jellyfin fallback checker: Polls every 30s for stuck requests
-- ✅ Library sync: Two-phase sync (add new + update existing metadata)
-- ❌ Anime TV shows: TESTED - stuck at IMPORTING (needs fallback checker)
-- ⚠️ Deletion sync: Has known bugs
+**Priorities & Roadmap:** See [docs/ROADMAP.md](docs/ROADMAP.md)
 
 ---
 
-## 2026-01-23: README Documentation Updates
+## 2026-01-25: Fixed SSE Broadcasts Not Reaching Frontend
 
-### Summary
+### Problem
 
-Added API documentation and troubleshooting sections to README.md to address documentation gaps identified during repo review.
+SSE connection established (green "Live updates active" indicator), but state changes from webhooks weren't triggering UI updates. Broadcasts were silently failing.
 
-### What Changed
+### Root Cause
 
-| Section | Content |
-|---------|---------|
-| **API Documentation** | Listed OpenAPI endpoints (`/docs`, `/redoc`), key API endpoints with methods, authentication notes |
-| **Troubleshooting** | Common issues: container startup, webhooks, stuck requests, database locks, SSE, deletion failures, health checks, debug mode |
+After `db.commit()` in the webhook handler, SQLAlchemy expires object attributes. When `broadcaster.broadcast_update()` tried to access `request.state` and other attributes for Pydantic serialization, the detached/expired object caused silent failures.
 
-### Files Changed
+### Fix
 
-| File | Change |
-|------|--------|
-| `README.md` | Added API Documentation section, added Troubleshooting section |
+Added `await db.refresh(media_request)` after commit in `app/routers/webhooks.py:70` to reload object attributes before broadcasting.
 
-### Related
-
-- Homeserver repo now has `context/workflows/app-deployment.md` for deploying custom apps
-
----
-
-## 2026-01-21: Library Sync - Update Existing Metadata (Phase 2)
-
-### Summary
-
-Enhanced library sync to update existing entries with missing correlation IDs. Previously, sync only added new items and skipped existing entries even when they had NULL `jellyfin_id`, `radarr_id`, or `sonarr_id`.
-
-### What Changed
-
-**New two-phase sync:**
-1. **Phase 1:** Add new items from Jellyfin (existing behavior)
-2. **Phase 2:** Update existing entries with missing metadata
-
-**Fields updated (only if NULL):**
-- `jellyfin_id` - Match by TMDB (movies), TVDB (TV), or AniDB (Shoko anime)
-- `radarr_id` - Match by TMDB ID
-- `sonarr_id` - Match by TVDB ID
-- `poster_url` - From Jellyfin item
-- `year` - From Jellyfin item
-
-### Files Changed
-
-| File | Change |
-|------|--------|
-| `app/services/library_sync.py` | Added `_update_missing_metadata()` method, updated `sync_available_content()` to call Phase 2 |
-| `app/schemas.py` | Added `updated` field to `SyncResultResponse` |
-| `app/routers/api.py` | Return `updated` count in response |
-| `app/templates/history.html` | Added "Updated (filled missing IDs)" row to sync modal |
-
-### Test Results
-
-Ran sync on dev server with 11 entries that had missing IDs:
-
-| Before | After | Count |
-|--------|-------|-------|
-| Movies missing radarr_id | All filled | 2 |
-| Movies missing jellyfin_id | All filled | 3 |
-| TV shows missing sonarr_id | All filled | 3 |
-| TV show (Link Click) missing jellyfin_id | Filled via AniDB | 1 |
-
-**API Response:**
-```json
-{
-  "total_scanned": 11,
-  "added": 0,
-  "updated": 10,
-  "skipped": 11,
-  "errors": 0
-}
+```python
+await db.commit()
+if media_request:
+    await db.refresh(media_request)  # <-- Fix: reload attributes after commit
+    await broadcaster.broadcast_update(media_request, event_type=event_type)
 ```
 
-### Known Limitation
+### Verification
 
-Anime managed by Shoko without TMDB/TVDB in Jellyfin may create duplicates in Phase 1. The Jellyfin item only has AniDB ID, which isn't checked during the "add new items" phase. These can be cleaned up manually or avoided by ensuring anime has TMDB/TVDB metadata in Jellyfin.
+- SSE events now appear in browser console: `SSE update received: {event_type: 'new_request'...}`
+- UI auto-updates when requests change state (Grabbed, Downloading, etc.)
 
-### Related
+---
 
-- `issues/library-sync-update-existing-metadata.md` - Original feature request (can be marked resolved)
-- `issues/status-tracker-bulk-media-sync.md` - Phase 1 documentation
+## 2026-01-25: Fixed Shokofin VFS Excluding Anime Without TMDB
+
+### Problem
+
+Anime movie "Cosmic Princess Kaguya!" stuck at `anime_matching` indefinitely. VFS generation showed only 3 of 4 movies, consistently skipping the new content.
+
+### Root Cause
+
+Shokofin setting `<FilterMovieLibraries>true</FilterMovieLibraries>` excludes movies without TMDB cross-references in Shoko. The movie had no TMDB link (AniDB 19701 was matched but not cross-referenced to TMDB 1575337).
+
+### Fix
+
+Set `FilterMovieLibraries=false` in Shokofin.xml and restart Jellyfin. VFS then included all 4 movies.
+
+### Documentation
+
+- Created: `issues/resolved/2026-01-25-shokofin-filtermovielibraries-excluding-anime.md`
+- Updated: `docs/reference/SHOKOFIN-VFS-REBUILD.md` with troubleshooting checklist
+- Created: `.claude/memory/session-2026-01-25-shokofin-vfs-filter-fix.md`
+
+### Also Fixed: SSE Timeout Disconnections
+
+Deployed `--timeout-keep-alive 60` to Uvicorn Dockerfile. SSE connections were dropping after 5 seconds (Uvicorn default) before the 15-second heartbeat could fire.
+
+### Pending Issue Noted
+
+qBittorrent progress only broadcasts on 5% changes - documented in `issues/2026-01-25-qbittorrent-progress-threshold.md` for later fix.
+
+---
+
+## 2026-01-22: Fixed SSE Live Updates Not Pushing to Frontend
+
+### Problem
+
+Dashboard showed "Live updates active" (green indicator) but state changes weren't updating the UI. Users had to manually refresh to see updated states.
+
+### Root Cause
+
+The custom event name `sse:refresh` conflicted with htmx's built-in SSE extension. When htmx sees `hx-trigger="sse:eventname"`, it expects the element to have `sse-connect` attribute and tries to use its SSE extension instead of listening for a custom DOM event.
+
+Browser console showed: `htmx:noSSESourceError`
+
+### Fix
+
+Renamed the custom event from `sse:refresh` to `status-update` in both templates:
+
+**Files changed:**
+- `app/templates/index.html` - `hx-trigger` and `htmx.trigger()` call
+- `app/templates/detail.html` - `hx-trigger` and `htmx.trigger()` call
+
+### Diagnostic Logging Added
+
+Also added logging to help debug future SSE issues:
+- `app/core/broadcaster.py` - logs client count and request details at broadcast time
+- `app/routers/sse.py` - logs when yielding events to clients
+
+### Learning
+
+htmx reserves certain prefixes for its extensions (`sse:`, `ws:`, `htmx:`). When using native JavaScript EventSource with custom events that trigger htmx, avoid these prefixes.
+
+### Verification
+
+Tested with "Rascal Does Not Dream of a Dreaming Girl" request - UI updated in real-time showing download progress, speed, and ETA without manual refresh.
 
 ---
 

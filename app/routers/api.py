@@ -19,15 +19,17 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import MediaRequest, RequestState, DeletionLog, DeletionSource
+from app.models import MediaRequest, RequestState, DeletionLog, DeletionSource, Episode
 from app.plugins import get_all_plugins
 from app.core.state_machine import state_machine
 from app.core.broadcaster import broadcaster
 from app.schemas import (
     HealthResponse,
     MediaRequestResponse,
+    MediaRequestWithEpisodesResponse,
     MediaRequestDetailResponse,
     RequestListResponse,
+    EpisodeResponse,
     DeleteRequestPayload,
     BulkDeleteRequestPayload,
     DeletionLogResponse,
@@ -43,6 +45,7 @@ from app.services.auth import (
 )
 from app.clients.jellyfin import jellyfin_client
 from app.services.deletion_orchestrator import delete_request as do_delete_request
+from app.clients.radarr import radarr_client
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +125,10 @@ async def list_requests(
     total_result = await db.execute(count_stmt)
     total = total_result.scalar() or 0
 
-    # Get paginated results
+    # Get paginated results with eager-loaded episodes
     stmt = (
-        stmt.order_by(MediaRequest.updated_at.desc())
+        stmt.options(selectinload(MediaRequest.episodes))
+        .order_by(MediaRequest.updated_at.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
@@ -133,7 +137,7 @@ async def list_requests(
     requests = result.scalars().all()
 
     return RequestListResponse(
-        requests=[MediaRequestResponse.model_validate(r) for r in requests],
+        requests=[MediaRequestWithEpisodesResponse.model_validate(r) for r in requests],
         total=total,
         page=page,
         per_page=per_page,
@@ -145,21 +149,22 @@ async def list_active_requests(db: AsyncSession = Depends(get_db)):
     """
     List all active (non-terminal) requests.
 
-    Active states: REQUESTED, APPROVED, INDEXED, DOWNLOADING,
-                   DOWNLOAD_DONE, IMPORTING, ANIME_MATCHING
+    Active states: REQUESTED, APPROVED, GRABBING, DOWNLOADING,
+                   DOWNLOADED, IMPORTING, ANIME_MATCHING
     """
     active_states = [
         RequestState.REQUESTED,
         RequestState.APPROVED,
-        RequestState.INDEXED,
+        RequestState.GRABBING,
         RequestState.DOWNLOADING,
-        RequestState.DOWNLOAD_DONE,
+        RequestState.DOWNLOADED,
         RequestState.IMPORTING,
         RequestState.ANIME_MATCHING,
     ]
 
     stmt = (
         select(MediaRequest)
+        .options(selectinload(MediaRequest.episodes))
         .where(MediaRequest.state.in_(active_states))
         .order_by(MediaRequest.updated_at.desc())
     )
@@ -167,7 +172,7 @@ async def list_active_requests(db: AsyncSession = Depends(get_db)):
     result = await db.execute(stmt)
     requests = result.scalars().all()
 
-    return [MediaRequestResponse.model_validate(r) for r in requests]
+    return [MediaRequestWithEpisodesResponse.model_validate(r) for r in requests]
 
 
 @router.get("/requests/{request_id}", response_model=MediaRequestDetailResponse)
@@ -182,7 +187,10 @@ async def get_request(
     """
     stmt = (
         select(MediaRequest)
-        .options(selectinload(MediaRequest.timeline_events))
+        .options(
+            selectinload(MediaRequest.timeline_events),
+            selectinload(MediaRequest.episodes),
+        )
         .where(MediaRequest.id == request_id)
     )
 
@@ -193,6 +201,38 @@ async def get_request(
         raise HTTPException(status_code=404, detail="Request not found")
 
     return MediaRequestDetailResponse.model_validate(request)
+
+
+@router.get("/requests/{request_id}/episodes", response_model=list[EpisodeResponse])
+async def get_request_episodes(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get all episodes for a TV series request.
+
+    Returns empty list for movies or requests without episodes.
+    Returns 404 if request not found.
+    """
+    # First verify the request exists
+    request_stmt = select(MediaRequest).where(MediaRequest.id == request_id)
+    request_result = await db.execute(request_stmt)
+    request = request_result.scalar_one_or_none()
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    # Get episodes for this request
+    stmt = (
+        select(Episode)
+        .where(Episode.request_id == request_id)
+        .order_by(Episode.season_number, Episode.episode_number)
+    )
+
+    result = await db.execute(stmt)
+    episodes = result.scalars().all()
+
+    return [EpisodeResponse.model_validate(ep) for ep in episodes]
 
 
 @router.get("/stats")
@@ -216,6 +256,109 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
             stats[state.value] = 0
 
     return {"stats": stats, "total": sum(stats.values())}
+
+
+@router.post("/requests/{request_id}/sync-titles")
+async def sync_alternate_titles(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Sync alternate titles from TMDB for anime movies.
+
+    This adds Japanese/alternate titles to Radarr so it can parse
+    releases with non-English names. Triggers a search after sync.
+
+    Useful for anime movies that can't grab releases due to title mismatch.
+    """
+    import json
+
+    stmt = select(MediaRequest).where(MediaRequest.id == request_id)
+    result = await db.execute(stmt)
+    request = result.scalar_one_or_none()
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    if not request.tmdb_id:
+        raise HTTPException(status_code=400, detail="Request has no TMDB ID")
+
+    # Look up movie in Radarr
+    movie = await radarr_client.get_movie_by_tmdb(request.tmdb_id)
+    if not movie:
+        raise HTTPException(
+            status_code=404,
+            detail="Movie not found in Radarr. Add it to Radarr first."
+        )
+
+    radarr_id = movie.get("id")
+    title = movie.get("title", request.title)
+
+    # Fetch alternate titles from TMDB via Radarr lookup
+    lookup_data = await radarr_client.lookup_movie(request.tmdb_id)
+    if not lookup_data:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not lookup movie from TMDB"
+        )
+
+    # Get alternate titles from lookup
+    lookup_titles = lookup_data.get("alternateTitles", [])
+    if not lookup_titles:
+        return {
+            "success": True,
+            "message": "No alternate titles found in TMDB",
+            "titles_added": 0,
+        }
+
+    # Extract title strings
+    title_strings = [t.get("title") for t in lookup_titles if t.get("title")]
+
+    # Add them to Radarr
+    success = await radarr_client.add_alternate_titles(radarr_id, title_strings)
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to add alternate titles to Radarr"
+        )
+
+    # Store in our database
+    request.alternate_titles = json.dumps(title_strings)
+    request.is_anime = True
+    request.radarr_id = radarr_id
+    await db.commit()
+
+    # Try to search and grab automatically
+    grabbed = await radarr_client.search_and_grab_anime(radarr_id, title_strings)
+
+    if not grabbed:
+        # Fallback to just triggering search
+        await radarr_client.trigger_search(radarr_id)
+
+    logger.info(
+        f"Synced {len(title_strings)} alternate titles for '{title}' "
+        f"(grabbed: {grabbed})"
+    )
+
+    # Get release info for debugging
+    releases = await radarr_client.search_releases(radarr_id)
+    release_info = []
+    for r in releases[:5]:
+        release_info.append({
+            "title": r.get("title", "")[:60],
+            "approved": r.get("approved", False),
+            "rejections": r.get("rejections", [])[:3],
+        })
+
+    return {
+        "success": True,
+        "message": f"Added {len(title_strings)} alternate titles",
+        "titles_added": len(title_strings),
+        "grabbed": grabbed,
+        "titles": title_strings[:10],
+        "releases_found": len(releases),
+        "sample_releases": release_info,
+    }
 
 
 @router.post("/requests/{request_id}/retry", response_model=MediaRequestResponse)
@@ -571,3 +714,18 @@ async def sync_library(
         errors=result.errors,
         error_details=result.error_details,
     )
+
+
+@router.post("/admin/force-library-scan")
+async def force_library_scan(
+    user: AuthenticatedUser = Depends(require_admin_user),
+):
+    """
+    Force a Jellyfin library scan.
+
+    Triggers Shokofin VFS regeneration without needing stuck requests.
+    Used by n8n workflow for SignalR recovery.
+    """
+    await jellyfin_client.trigger_library_scan()
+    logger.info(f"Library scan triggered by {user.username}")
+    return {"success": True, "message": "Library scan triggered"}

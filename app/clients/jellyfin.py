@@ -336,6 +336,164 @@ class JellyfinClient:
             logger.warning(f"Error searching Jellyfin by TMDB: {e}")
             return None
 
+    async def find_item_by_tvdb(
+        self,
+        tvdb_id: int,
+        media_type: str = "Series",
+    ) -> Optional[dict]:
+        """
+        Find a single PLAYABLE Jellyfin item by TVDB ID.
+
+        Uses AnyProviderIdEquals filter for O(1) lookup efficiency.
+
+        Args:
+            tvdb_id: The TVDB ID to search for
+            media_type: Item type (usually "Series" for TV)
+
+        Returns:
+            Jellyfin item dict if found AND playable, None otherwise
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get(
+                "/Items",
+                params={
+                    "Recursive": "true",
+                    "IncludeItemTypes": media_type,
+                    "AnyProviderIdEquals": f"Tvdb.{tvdb_id}",
+                    "Fields": "ProviderIds,MediaSources,Path",
+                }
+            )
+
+            if response.status_code != 200:
+                logger.warning(f"Failed to search Jellyfin by TVDB {tvdb_id}: {response.status_code}")
+                return None
+
+            data = response.json()
+            items = data.get("Items", [])
+
+            if items:
+                # Verify exact TVDB match (same issue as TMDB - filter is unreliable)
+                exact_match = next(
+                    (item for item in items
+                     if item.get("ProviderIds", {}).get("Tvdb") == str(tvdb_id)),
+                    None
+                )
+
+                if not exact_match:
+                    logger.debug(
+                        f"[JELLYFIN] AnyProviderIdEquals returned {len(items)} items for TVDB {tvdb_id}, "
+                        f"but none matched exactly."
+                    )
+                    return None
+
+                item = exact_match
+                item_id = item.get("Id")
+                item_name = item.get("Name", "Unknown")
+
+                # Verify item has actual media (not just metadata)
+                media_sources = item.get("MediaSources", [])
+                path = item.get("Path")
+
+                if media_sources or path:
+                    logger.debug(
+                        f"Found playable Jellyfin item for TVDB {tvdb_id}: "
+                        f"{item_name} ({item_id})"
+                    )
+                    return item
+                else:
+                    logger.debug(
+                        f"[JELLYFIN] Item {item_name} has TVDB {tvdb_id} but no MediaSources/Path - not playable"
+                    )
+                    return None
+
+            return None
+
+        except httpx.RequestError as e:
+            logger.warning(f"Request error searching Jellyfin by TVDB: {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Error searching Jellyfin by TVDB: {e}")
+            return None
+
+    async def search_by_title(
+        self,
+        title: str,
+        year: Optional[int] = None,
+    ) -> Optional[dict]:
+        """
+        Search Jellyfin by title (fallback when provider IDs don't match).
+
+        Used for anime that may be recategorized by Shoko.
+
+        Args:
+            title: The media title to search for
+            year: Optional year for more precise matching
+
+        Returns:
+            Jellyfin item dict if found AND playable, None otherwise
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get(
+                "/Items",
+                params={
+                    "Recursive": "true",
+                    "SearchTerm": title,
+                    "IncludeItemTypes": "Movie,Series",
+                    "Fields": "ProviderIds,MediaSources,Path,ProductionYear",
+                    "Limit": 10,
+                }
+            )
+
+            if response.status_code != 200:
+                logger.warning(f"Failed to search Jellyfin by title '{title}': {response.status_code}")
+                return None
+
+            data = response.json()
+            items = data.get("Items", [])
+
+            for item in items:
+                item_name = item.get("Name", "")
+                item_year = item.get("ProductionYear")
+                title_lower = title.lower()
+                name_lower = item_name.lower()
+
+                # Check title match: exact OR request title contained in item name
+                # (handles anime where English "Mirai" matches Japanese "Mirai no Mirai")
+                title_matches = (
+                    name_lower == title_lower or
+                    name_lower.startswith(title_lower + " ") or
+                    title_lower in name_lower.split()  # word boundary match
+                )
+                if not title_matches:
+                    continue
+
+                # If year provided, check it matches
+                if year and item_year and item_year != year:
+                    continue
+
+                # Verify item is playable
+                media_sources = item.get("MediaSources", [])
+                path = item.get("Path")
+
+                if media_sources or path:
+                    logger.debug(
+                        f"Found playable Jellyfin item by title search: "
+                        f"'{item_name}' (ID: {item.get('Id')})"
+                    )
+                    return item
+
+            logger.debug(f"No playable item found for title '{title}'" + (f" ({year})" if year else ""))
+            return None
+
+        except httpx.RequestError as e:
+            logger.warning(f"Request error searching Jellyfin by title: {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Error searching Jellyfin by title: {e}")
+            return None
+
     async def get_all_items(
         self,
         include_types: list[str] | None = None,

@@ -174,6 +174,41 @@ class SonarrClient:
             logger.error(f"Sonarr health check failed: {e}")
             return False
 
+    async def get_episode_count(self, series_id: int, season_number: int) -> Optional[int]:
+        """
+        Get total episode count for a specific series/season.
+
+        This is used to get the actual episode count for GRABBING state display,
+        since per-episode grabs send individual webhooks (each with episodes=[1 episode])
+        and we need the true total, not just len(webhook.episodes).
+
+        Args:
+            series_id: Sonarr series ID
+            season_number: Season number to count episodes for
+
+        Returns:
+            Episode count if found, None on error
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get(
+                "/api/v3/episode",
+                params={"seriesId": series_id, "seasonNumber": season_number}
+            )
+
+            if response.status_code == 200:
+                episodes = response.json()
+                count = len(episodes)
+                logger.debug(f"Sonarr: series {series_id} season {season_number} has {count} episodes")
+                return count
+            else:
+                logger.warning(f"Failed to get episodes for series {series_id}: {response.status_code}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error getting Sonarr episode count: {e}")
+            return None
+
     async def get_all_series(self) -> list[dict]:
         """
         Fetch all series from Sonarr for bulk sync.
@@ -199,6 +234,120 @@ class SonarrClient:
         except Exception as e:
             logger.error(f"Unexpected error fetching Sonarr series: {e}")
             return []
+
+
+    async def lookup_series(self, tvdb_id: int) -> Optional[dict]:
+        """
+        Lookup series from TVDB via Sonarr (gets full metadata including alternate titles).
+
+        Args:
+            tvdb_id: TVDB series ID
+
+        Returns:
+            Full series metadata including alternateTitles
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get("/api/v3/series/lookup", params={"term": f"tvdb:{tvdb_id}"})
+
+            if response.status_code == 200:
+                results = response.json()
+                return results[0] if results else None
+            else:
+                logger.warning(f"Series lookup failed for TVDB {tvdb_id}: {response.status_code}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error looking up series: {e}")
+            return None
+
+    async def add_alternate_titles(self, series_id: int, titles: list[str]) -> bool:
+        """
+        Add alternate titles to a series for better release matching.
+
+        Used for anime where Japanese titles differ from English titles.
+
+        Args:
+            series_id: Sonarr series ID
+            titles: List of alternate title strings to add
+
+        Returns:
+            True if successful
+        """
+        try:
+            # Get current series data
+            series = await self.get_series(series_id)
+            if not series:
+                logger.error(f"Series {series_id} not found in Sonarr")
+                return False
+
+            # Get existing alternate titles
+            existing_titles = series.get("alternateTitles", [])
+            existing_title_strings = {t.get("title", "").lower() for t in existing_titles}
+
+            logger.info(
+                f"Series {series_id} has {len(existing_titles)} existing alternate titles: "
+                f"{[t.get('title', '') for t in existing_titles[:5]]}"
+            )
+
+            # Add new titles that don't already exist
+            new_titles_added = []
+            for title in titles:
+                if title.lower() not in existing_title_strings:
+                    existing_titles.append({
+                        "title": title,
+                        "seasonNumber": -1,  # -1 means all seasons
+                    })
+                    new_titles_added.append(title)
+
+            if not new_titles_added:
+                logger.info(f"All alternate titles already exist for series {series_id}")
+                return True
+
+            # Update series with new alternate titles
+            series["alternateTitles"] = existing_titles
+            success = await self.update_series(series)
+
+            if success:
+                logger.info(
+                    f"Added {len(new_titles_added)} alternate titles to series {series_id}: "
+                    f"{new_titles_added[:3]}"
+                )
+            return success
+
+        except Exception as e:
+            logger.error(f"Error adding alternate titles to series: {e}")
+            return False
+
+    async def update_series(self, series: dict) -> bool:
+        """
+        Update a series in Sonarr (e.g., to add alternate titles).
+
+        Args:
+            series: Full series object with updates
+
+        Returns:
+            True if successful
+        """
+        try:
+            client = await self._get_client()
+            series_id = series.get("id")
+            response = await client.put(f"/api/v3/series/{series_id}", json=series)
+
+            if response.status_code == 200:
+                logger.info(f"Successfully updated Sonarr series {series_id}")
+                return True
+            else:
+                error_text = response.text[:200] if response.text else "No error body"
+                logger.error(
+                    f"Failed to update series {series_id}: status={response.status_code}, "
+                    f"error={error_text}"
+                )
+                return False
+
+        except Exception as e:
+            logger.error(f"Error updating series: {e}")
+            return False
 
 
 # Singleton instance

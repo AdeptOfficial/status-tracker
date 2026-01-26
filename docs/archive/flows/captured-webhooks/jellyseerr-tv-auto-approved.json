@@ -1,0 +1,30 @@
+{
+  "notification_type": "MEDIA_AUTO_APPROVED",
+  "event": "TV Request Automatically Approved",
+  "subject": "Lycoris Recoil (2022)",
+  "message": "A spirited secret agent and her aloof colleague work in an unassuming, charming cafe while happily helping their customers' out in any way they can.",
+  "image": "https://image.tmdb.org/t/p/w600_and_h900_bestv2/hcPLwLGEU4alv9sOWvzSY4IorxV.jpg",
+  "media": {
+    "media_type": "tv",
+    "tmdbId": "154494",
+    "tvdbId": "414057",
+    "status": "PENDING",
+    "status4k": "UNKNOWN"
+  },
+  "request": {
+    "request_id": "68",
+    "requestedBy_email": "adept@syna.com",
+    "requestedBy_username": "adept",
+    "requestedBy_avatar": "/avatarproxy/...",
+    "requestedBy_settings_discordId": "",
+    "requestedBy_settings_telegramChatId": ""
+  },
+  "issue": null,
+  "comment": null,
+  "extra": [
+    {
+      "name": "Requested Seasons",
+      "value": "1"
+    }
+  ]
+}

@@ -5,7 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
-from app.models import RequestState, MediaType, DeletionSource, ServiceSyncStatus, DeletionStatus
+from app.models import RequestState, MediaType, DeletionSource, ServiceSyncStatus, DeletionStatus, EpisodeState
 
 
 # ============================================
@@ -43,6 +43,9 @@ class MediaRequestResponse(BaseModel):
     radarr_id: Optional[int] = None
     shoko_series_id: Optional[int] = None
 
+    # Anime detection
+    is_anime: Optional[bool] = None
+
     # Download info
     download_progress: Optional[float] = None
     download_speed: Optional[str] = None
@@ -79,8 +82,88 @@ class MediaRequestResponse(BaseModel):
         from_attributes = True
 
 
-class MediaRequestDetailResponse(MediaRequestResponse):
-    """Media request with full timeline."""
+# Forward reference for EpisodeResponse (defined below)
+# This allows MediaRequestResponse to reference it before it's defined
+class EpisodeResponse(BaseModel):
+    """Single episode for API response."""
+
+    id: int
+    request_id: int
+    season_number: int
+    episode_number: int
+    episode_title: Optional[str] = None
+    state: EpisodeState
+
+    # Service IDs
+    sonarr_episode_id: Optional[int] = None
+    episode_tvdb_id: Optional[int] = None
+
+    # Download tracking
+    qbit_hash: Optional[str] = None
+
+    # File path
+    final_path: Optional[str] = None
+
+    # Anime matching
+    shoko_file_id: Optional[str] = None
+
+    # Jellyfin
+    jellyfin_id: Optional[str] = None
+
+    # Timestamps
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Extended response that includes episodes (for TV shows)
+class MediaRequestWithEpisodesResponse(MediaRequestResponse):
+    """Media request with per-episode tracking (for TV shows)."""
+
+    episodes: list[EpisodeResponse] = []
+    total_episodes: Optional[int] = None  # Actual total from Sonarr API (not just len(episodes))
+
+    @property
+    def episode_summary(self) -> dict:
+        """Get episode state summary for quick display.
+
+        For GRABBING state, 'grabbed' = episodes with rows in DB,
+        'total' = actual episode count from Sonarr API.
+        This handles per-episode grabs where each webhook only includes 1 episode.
+        """
+        if not self.episodes:
+            return {
+                "total": self.total_episodes or 0,
+                "grabbed": 0,
+                "available": 0,
+                "downloading": 0,
+                "pending": self.total_episodes or 0,
+            }
+
+        available = sum(1 for e in self.episodes if e.state == EpisodeState.AVAILABLE)
+        downloading = sum(1 for e in self.episodes if e.state == EpisodeState.DOWNLOADING)
+        grabbing = sum(1 for e in self.episodes if e.state == EpisodeState.GRABBING)
+
+        # Use total_episodes from Sonarr API if available, otherwise len(episodes)
+        total = self.total_episodes if self.total_episodes else len(self.episodes)
+
+        # grabbed = episodes we have rows for (grabbed from indexer)
+        grabbed = len(self.episodes)
+
+        return {
+            "total": total,
+            "grabbed": grabbed,  # Episodes grabbed so far (rows in DB)
+            "grabbing": grabbing,  # Episodes in GRABBING state specifically
+            "available": available,
+            "downloading": downloading,
+            "pending": total - grabbed,  # Episodes not yet grabbed
+        }
+
+
+class MediaRequestDetailResponse(MediaRequestWithEpisodesResponse):
+    """Media request with full timeline and episodes."""
 
     timeline_events: list[TimelineEventResponse] = []
 
@@ -88,7 +171,7 @@ class MediaRequestDetailResponse(MediaRequestResponse):
 class RequestListResponse(BaseModel):
     """Paginated list of requests."""
 
-    requests: list[MediaRequestResponse]
+    requests: list[MediaRequestWithEpisodesResponse]
     total: int
     page: int
     per_page: int
