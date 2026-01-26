@@ -369,8 +369,9 @@ async def retry_request(
     """
     Retry a failed or timed out request.
 
-    This resets the request back to REQUESTED state so it can be
-    picked up again by Jellyseerr/Sonarr/Radarr.
+    This resets the request back to APPROVED state so it can be
+    re-grabbed by Sonarr/Radarr. Uses APPROVED (not REQUESTED) because
+    the state machine only allows FAILED/TIMEOUT -> APPROVED transitions.
 
     Only works for requests in FAILED or TIMEOUT states.
     """
@@ -388,10 +389,10 @@ async def retry_request(
                    f"Only failed or timed out requests can be retried."
         )
 
-    # Transition back to REQUESTED
+    # Transition back to APPROVED (state machine allows FAILED/TIMEOUT -> APPROVED)
     success = await state_machine.transition(
         request,
-        RequestState.REQUESTED,
+        RequestState.APPROVED,
         db,
         service="api",
         event_type="Retry",

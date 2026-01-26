@@ -6,6 +6,43 @@ Development log for the status-tracker project. New entries at the top.
 
 ---
 
+## 2026-01-26: Fixed Retry Button and Timeout Recovery
+
+### Problem
+
+1. **Retry button broken:** Clicking retry on timed-out requests returned 500 error
+2. **No timeout recovery:** If Jellyfin eventually found a file after timeout, request stayed stuck
+
+### Root Cause
+
+1. **api.py:** Retry endpoint tried `TIMEOUT -> REQUESTED` but state machine only allowed `TIMEOUT -> APPROVED`
+2. **state_machine.py:** Missing `TIMEOUT -> AVAILABLE` transition for when Jellyfin eventually finds the file
+
+### Fix
+
+**state_machine.py** (line 46):
+```python
+# Before:
+RequestState.TIMEOUT: [RequestState.APPROVED]
+# After:
+RequestState.TIMEOUT: [RequestState.APPROVED, RequestState.AVAILABLE]
+```
+
+**api.py** (retry endpoint):
+```python
+# Before:
+RequestState.REQUESTED
+# After:
+RequestState.APPROVED
+```
+
+### Result
+
+- Retry button now works for timed-out requests
+- Jellyfin verifier can mark timed-out requests as available if file is found later
+
+---
+
 ## 2026-01-25: Fixed SSE Broadcasts Not Reaching Frontend
 
 ### Problem

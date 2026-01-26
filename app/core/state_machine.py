@@ -43,7 +43,7 @@ VALID_TRANSITIONS: dict[RequestState, list[RequestState]] = {
     RequestState.AVAILABLE: [RequestState.FAILED],  # Can fail after available (manual override)
     RequestState.MATCH_FAILED: [RequestState.ANIME_MATCHING, RequestState.AVAILABLE],  # After manual link in Shoko
     RequestState.FAILED: [RequestState.APPROVED],  # Can retry from APPROVED
-    RequestState.TIMEOUT: [RequestState.APPROVED],  # Can retry from APPROVED
+    RequestState.TIMEOUT: [RequestState.APPROVED, RequestState.AVAILABLE],  # Can retry or complete if Jellyfin finds file
 }
 
 
