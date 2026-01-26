@@ -81,6 +81,8 @@ async def run_migrations(conn):
         },
         "requests": {
             "alternate_titles": ("TEXT", "NULL"),  # JSON array of alternate titles for Shoko matching
+            "match_failure_reason": ("VARCHAR(500)", "NULL"),  # Why Shoko auto-link failed
+            "vfs_rebuild_at": ("DATETIME", "NULL"),  # Last Shokofin VFS rebuild attempt
         },
     }
 

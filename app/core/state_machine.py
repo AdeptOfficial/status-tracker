@@ -32,15 +32,16 @@ VALID_TRANSITIONS: dict[RequestState, list[RequestState]] = {
         RequestState.FAILED,
         RequestState.TIMEOUT,
     ],
-    RequestState.DOWNLOADED: [RequestState.IMPORTING, RequestState.ANIME_MATCHING, RequestState.FAILED],
+    RequestState.DOWNLOADED: [RequestState.IMPORTING, RequestState.ANIME_MATCHING, RequestState.AVAILABLE, RequestState.FAILED],
     RequestState.IMPORTING: [
         RequestState.AVAILABLE,
         RequestState.ANIME_MATCHING,  # Shoko detects anime file
         RequestState.FAILED,
         RequestState.TIMEOUT,
     ],
-    RequestState.ANIME_MATCHING: [RequestState.AVAILABLE, RequestState.FAILED],
+    RequestState.ANIME_MATCHING: [RequestState.AVAILABLE, RequestState.MATCH_FAILED, RequestState.FAILED],
     RequestState.AVAILABLE: [RequestState.FAILED],  # Can fail after available (manual override)
+    RequestState.MATCH_FAILED: [RequestState.ANIME_MATCHING, RequestState.AVAILABLE],  # After manual link in Shoko
     RequestState.FAILED: [RequestState.APPROVED],  # Can retry from APPROVED
     RequestState.TIMEOUT: [RequestState.APPROVED],  # Can retry from APPROVED
 }

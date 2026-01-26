@@ -10,6 +10,7 @@
     'downloaded': 'bg-teal-500/20 text-teal-400 border-teal-500/50',
     'importing': 'bg-orange-500/20 text-orange-400 border-orange-500/50',
     'anime_matching': 'bg-pink-500/20 text-pink-400 border-pink-500/50',
+    'match_failed': 'bg-amber-500/20 text-amber-400 border-amber-500/50',
     'available': 'bg-green-500/20 text-green-400 border-green-500/50',
     'failed': 'bg-red-500/20 text-red-400 border-red-500/50',
     'timeout': 'bg-gray-500/20 text-gray-400 border-gray-500/50'
@@ -24,6 +25,7 @@
     'downloaded': 'Downloaded',
     'importing': 'Importing',
     'anime_matching': 'Matching',
+    'match_failed': 'Needs Link',
     'available': 'Ready',
     'failed': 'Failed',
     'timeout': 'Timeout'
@@ -33,10 +35,12 @@
     'requested': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>',
     'approved': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>',
     'indexed': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>',
+    'grabbing': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>',
     'downloading': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>',
     'downloaded': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>',
     'importing': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>',
     'anime_matching': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>',
+    'match_failed': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>',
     'available': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
     'failed': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>',
     'timeout': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>'
@@ -108,7 +112,7 @@
             <div class="mt-3 flex items-center gap-3">
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border
                              {{ state_colors.get(request.state.value, 'bg-gray-500/20 text-gray-400 border-gray-500/50') }}
-                             {% if request.state.value in ['downloading', 'importing', 'anime_matching'] %}animate-pulse-slow{% endif %}">
+                             {% if request.state.value in ['downloading', 'importing', 'anime_matching', 'match_failed'] %}animate-pulse-slow{% endif %}">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         {{ state_icons.get(request.state.value, '')|safe }}
                     </svg>
@@ -172,6 +176,7 @@
                                     'downloaded': 'text-teal-400',
                                     'importing': 'text-orange-400',
                                     'anime_matching': 'text-pink-400',
+                                    'match_failed': 'text-amber-400',
                                     'available': 'text-green-400',
                                     'failed': 'text-red-400'
                                 } %}
@@ -181,6 +186,7 @@
                                     'downloaded': '●',
                                     'importing': '↻',
                                     'anime_matching': '◐',
+                                    'match_failed': '⚠',
                                     'available': '✓',
                                     'failed': '✗'
                                 } %}

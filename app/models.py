@@ -30,6 +30,7 @@ class RequestState(str, enum.Enum):
     AVAILABLE = "available"  # Ready to watch in Jellyfin
     FAILED = "failed"  # Something went wrong
     TIMEOUT = "timeout"  # Stuck in a state too long
+    MATCH_FAILED = "match_failed"  # Shoko couldn't match, needs manual intervention
 
     # Aliases for backward compatibility during migration
     INDEXED = "grabbing"  # Deprecated: use GRABBING
@@ -49,6 +50,7 @@ class EpisodeState(str, enum.Enum):
     ANIME_MATCHING = "anime_matching"  # Shoko matching (anime only)
     AVAILABLE = "available"  # In Jellyfin, ready to watch
     FAILED = "failed"  # Error occurred
+    MATCH_FAILED = "match_failed"  # Episode file needs manual linking in Shoko
 
 
 class DeletionSource(str, enum.Enum):
@@ -132,6 +134,9 @@ class MediaRequest(Base):
     # Alternate titles (JSON array string) - for Shoko matching with Japanese titles
     alternate_titles: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Match failure info (for user notification in dashboard)
+    match_failure_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
     # Download info (populated during DOWNLOADING)
     download_progress: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     download_speed: Mapped[Optional[str]] = mapped_column(
@@ -183,6 +188,7 @@ class MediaRequest(Base):
     )
     state_changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     available_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # When reached AVAILABLE
+    vfs_rebuild_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # Last Shokofin VFS rebuild attempt
 
     # Relationships
     timeline_events: Mapped[list["TimelineEvent"]] = relationship(

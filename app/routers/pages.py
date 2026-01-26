@@ -75,6 +75,7 @@ async def index(
         RequestState.DOWNLOADED,
         RequestState.IMPORTING,
         RequestState.ANIME_MATCHING,
+        RequestState.MATCH_FAILED,  # Show in UI so users can notify admin
     ]
 
     stmt = (

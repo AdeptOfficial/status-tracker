@@ -39,7 +39,7 @@ else:
 # Shoko SignalR imports (conditional)
 if settings.ENABLE_SHOKO:
     from app.clients.shoko import get_shoko_client
-    from app.plugins.shoko import handle_shoko_file_matched
+    from app.plugins.shoko import handle_shoko_file_matched, handle_shoko_file_not_matched
 
 # Timeout checker imports (conditional)
 if settings.ENABLE_TIMEOUT_CHECKER:
@@ -79,7 +79,17 @@ async def shoko_signalr_loop():
                 logger.error(f"Error handling Shoko event: {e}")
                 await db.rollback()
 
+    async def on_file_not_matched(event):
+        async with async_session() as db:
+            try:
+                await handle_shoko_file_not_matched(event, db)
+                await db.commit()
+            except Exception as e:
+                logger.error(f"Error handling Shoko FileNotMatched event: {e}")
+                await db.rollback()
+
     client.on_file_matched(on_file_matched)
+    client.on_file_not_matched(on_file_not_matched)
 
     # Run the client (handles reconnection internally)
     await client.start()

@@ -60,6 +60,11 @@ def calculate_aggregate_state(request: "MediaRequest") -> RequestState:
     if any(s == EpisodeState.FAILED for s in states):
         return RequestState.FAILED
 
+    # Rule 2b: Any episode needs manual linking → request shows match_failed
+    # (allows user to see which episodes need manual intervention)
+    if any(s == EpisodeState.MATCH_FAILED for s in states):
+        return RequestState.MATCH_FAILED
+
     # Rule 3: Return highest priority in-progress state
     # Priority order from highest to lowest
     state_priority = [

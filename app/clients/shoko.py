@@ -86,6 +86,7 @@ class ShokoClient:
 
         # Event callbacks
         self._file_matched_callbacks: list[Callable[[FileEvent], Awaitable[None]]] = []
+        self._file_not_matched_callbacks: list[Callable[[FileEvent], Awaitable[None]]] = []
 
     @property
     def state(self) -> ConnectionState:
@@ -100,6 +101,10 @@ class ShokoClient:
     def on_file_matched(self, callback: Callable[[FileEvent], Awaitable[None]]) -> None:
         """Register callback for file matched events."""
         self._file_matched_callbacks.append(callback)
+
+    def on_file_not_matched(self, callback: Callable[[FileEvent], Awaitable[None]]) -> None:
+        """Register callback for file NOT matched events."""
+        self._file_not_matched_callbacks.append(callback)
 
     async def start(self) -> None:
         """
@@ -461,6 +466,7 @@ class ShokoClient:
         """Handle ShokoEvent:FileNotMatched events.
 
         Fired when Shoko cannot match a file to AniDB.
+        Dispatches to registered callbacks for auto-link attempts.
         """
         try:
             logger.debug(f"FileNotMatched raw args: {args}")
@@ -475,15 +481,27 @@ class ShokoClient:
                     data = {"raw": args}
                 logger.debug(f"FileNotMatched parsed data: {data}")
 
-                # Try to extract file info
+                # Parse into FileEvent for consistent handling
                 file_info = data.get("FileInfo", data)
-                relative_path = (
-                    file_info.get("RelativePath", "") or
-                    file_info.get("relativePath", "") or
-                    data.get("FileName", "") or
-                    data.get("filename", "")
-                )
-                logger.warning(f"Shoko file NOT matched: {relative_path or '(no path)'}")
+                event = self._parse_file_event(file_info, "not_matched")
+
+                # Try fallback fields if path is empty
+                if not event.relative_path:
+                    event.relative_path = (
+                        data.get("FileName", "") or
+                        data.get("filename", "") or
+                        file_info.get("FileName", "") or
+                        file_info.get("filename", "")
+                    )
+
+                logger.warning(f"Shoko file NOT matched: {event.relative_path or '(no path)'} (file_id: {event.file_id})")
+
+                # Dispatch to registered callbacks
+                for callback in self._file_not_matched_callbacks:
+                    try:
+                        await callback(event)
+                    except Exception as e:
+                        logger.error(f"Error in file not matched callback: {e}")
         except Exception as e:
             logger.error(f"Error handling file not matched event: {e}", exc_info=True)
 
@@ -498,8 +516,9 @@ class ShokoClient:
         has_cross_refs = bool(cross_refs) if isinstance(cross_refs, list) else data.get("HasCrossReferences", data.get("hasCrossReferences", False))
 
         return FileEvent(
-            file_id=data.get("FileId", data.get("fileId", 0)),
-            managed_folder_id=data.get("ManagedFolderId", data.get("managedFolderId", 0)),
+            # Shoko uses FileID (uppercase ID) in payload
+            file_id=data.get("FileID", data.get("FileId", data.get("fileId", 0))),
+            managed_folder_id=data.get("ManagedFolderId", data.get("managedFolderId", data.get("ImportFolderID", 0))),
             relative_path=data.get("RelativePath", data.get("relativePath", "")),
             has_cross_references=has_cross_refs,
             event_type=event_type,
@@ -615,6 +634,108 @@ class ShokoHttpClient:
             return False, "Shoko API timeout"
         except Exception as e:
             logger.error(f"Shoko RemoveMissingFiles error: {e}")
+            return False, f"Error: {e}"
+
+    async def search_series(self, query: str, fuzzy: bool = True) -> list[dict]:
+        """Search Shoko's local series database by title.
+
+        Returns list of series with IDs that can be used for linking.
+        """
+        if not self.api_key:
+            return []
+
+        try:
+            resp = await self._client.get(
+                f"{self.base_url}/api/v3/Series",
+                params={"search": query, "fuzzy": fuzzy, "pageSize": 10},
+                headers=self._headers(),
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("List", []) if isinstance(data, dict) else data
+            return []
+        except Exception as e:
+            logger.error(f"Shoko series search error: {e}")
+            return []
+
+    async def get_series_episodes(self, series_id: int) -> list[dict]:
+        """Get episodes for a series (needed to find episode ID for linking)."""
+        if not self.api_key:
+            return []
+
+        try:
+            resp = await self._client.get(
+                f"{self.base_url}/api/v3/Series/{series_id}/Episode",
+                params={"pageSize": 100, "includeMissing": "true"},
+                headers=self._headers(),
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("List", []) if isinstance(data, dict) else data
+            return []
+        except Exception as e:
+            logger.error(f"Shoko get series episodes error: {e}")
+            return []
+
+    async def get_file_info(self, file_id: int) -> Optional[dict]:
+        """Get file info including path and size."""
+        if not self.api_key:
+            return None
+
+        try:
+            resp = await self._client.get(
+                f"{self.base_url}/api/v3/File/{file_id}",
+                headers=self._headers(),
+            )
+            if resp.status_code == 200:
+                return resp.json()
+            return None
+        except Exception as e:
+            logger.error(f"Shoko get file info error: {e}")
+            return None
+
+    async def link_file_to_episode(self, file_id: int, episode_ids: list[int]) -> Tuple[bool, str]:
+        """Manually link a file to one or more episodes.
+
+        This is the core method for auto-linking unrecognized files.
+        """
+        if not self.api_key:
+            return False, "Shoko API key not configured"
+
+        try:
+            resp = await self._client.post(
+                f"{self.base_url}/api/v3/File/{file_id}/Link",
+                json={"episodeIDs": episode_ids},
+                headers=self._headers(),
+            )
+            if resp.status_code in (200, 204):
+                return True, "File linked successfully"
+            return False, f"Link failed: HTTP {resp.status_code} - {resp.text}"
+        except Exception as e:
+            logger.error(f"Shoko link file to episode error: {e}")
+            return False, f"Error: {e}"
+
+    async def link_file_from_series(
+        self, file_id: int, series_id: int, range_start: str = "1", range_end: str = "1"
+    ) -> Tuple[bool, str]:
+        """Link file to episode range from a series.
+
+        For anime movies, use range_start="1", range_end="1" (episode 1).
+        """
+        if not self.api_key:
+            return False, "Shoko API key not configured"
+
+        try:
+            resp = await self._client.post(
+                f"{self.base_url}/api/v3/File/{file_id}/LinkFromSeries",
+                json={"seriesID": series_id, "rangeStart": range_start, "rangeEnd": range_end},
+                headers=self._headers(),
+            )
+            if resp.status_code in (200, 204):
+                return True, "File linked to series successfully"
+            return False, f"Link failed: HTTP {resp.status_code} - {resp.text}"
+        except Exception as e:
+            logger.error(f"Shoko link file from series error: {e}")
             return False, f"Error: {e}"
 
 
