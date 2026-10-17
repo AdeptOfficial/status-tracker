@@ -6,6 +6,22 @@ Development log for the status-tracker project. New entries at the top.
 
 ---
 
+## 2026-10-17: AdepT branding — Tailwind CDN removed, vanilla token CSS
+
+- Full restyle to the AdepT brand (canonical: `~/git/adeptproductions/branding/README.md`,
+  rules in `~/git/AGENTS.md`): 56px emblem header, terminal motd prompts, `// headings`,
+  square corners, 12 request-states mapped to brand tokens via per-state `--st` vars
+  (downloading→signal, available→matrix, failed→crimson, importing/match-failed→scarf,
+  indexed/grabbing/matching→magenta, timeout→faint), code-signed footer with version.
+- Tailwind Play CDN removed; `app/static/style.css` + emblem served via new `/static`
+  mount in main.py. All 8 templates converted; every behavior (SSE, htmx refresh,
+  modals, bulk delete, sync, login) kept byte-identical in logic — JS only had its
+  class strings swapped.
+- Verified: pages screenshot-checked (active/status/login) in a local container.
+  Tests: 8 passed / 7 failed — failures are PRE-EXISTING (missing
+  `docs/flows/captured-webhooks/` fixtures broke run_tests.sh and the flow tests
+  before this change; identical results on the untouched tree).
+
 ## 2026-01-26: Fixed Retry Button and Timeout Recovery
 
 ### Problem

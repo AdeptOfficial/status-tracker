@@ -36,7 +36,8 @@ status-tracker/
 │   ├── services/            # Background services
 │   ├── plugins/             # Webhook handlers per service
 │   ├── routers/             # FastAPI routes
-│   └── templates/           # Jinja2 HTML (htmx + Tailwind)
+│   ├── templates/           # Jinja2 HTML (htmx + AdepT token CSS)
+│   └── static/              # style.css + emblem (branding: ~/git/adeptproductions/branding)
 ├── docker-compose.yml       # Deployment config
 ├── .env.template            # Environment variables template
 ├── Dockerfile

@@ -1,263 +1,144 @@
 {% extends "base.html" %}
 
-{% block title %}History - Status Tracker{% endblock %}
+{% block title %}history — status-tracker{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-    <!-- Header with stats -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-            <h1 class="text-2xl font-bold">Request History</h1>
-            <p class="text-gray-400">{{ requests|length }} completed request{% if requests|length != 1 %}s{% endif %}</p>
-        </div>
+<p class="motd">adept@lab:~$ cat requests.log<span class="cursor">▋</span></p>
 
-        <!-- Right side: filters and sync button -->
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-            <!-- Filter by user (if users exist) -->
-            {% if users %}
-            <div class="flex items-center gap-2">
-                <label for="user-filter" class="text-sm text-gray-400">Filter by user:</label>
-                <select id="user-filter"
-                        onchange="applyFilters()"
-                        class="bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">All users</option>
-                    {% for user in users %}
-                        <option value="{{ user }}" {% if current_user_filter == user %}selected{% endif %}>{{ user }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endif %}
-
-            <!-- Library Sync button (admin only) -->
-            {% if is_admin %}
-            <button id="sync-library-btn"
-                    onclick="showSyncModal()"
-                    class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                </svg>
-                Sync Library
-            </button>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- State filter tabs -->
-    <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
-        <a href="/history"
-           class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
-                  {% if not current_state_filter %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">
-            All
-        </a>
-        <a href="/history?state=available"
-           class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
-                  {% if current_state_filter == 'available' %}bg-green-700 text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">
-            Available ({{ stats.available or 0 }})
-        </a>
-        <a href="/history?state=failed"
-           class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
-                  {% if current_state_filter == 'failed' %}bg-red-700 text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">
-            Failed ({{ stats.failed or 0 }})
-        </a>
-        <a href="/history?state=timeout"
-           class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
-                  {% if current_state_filter == 'timeout' %}bg-gray-600 text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">
-            Timeout ({{ stats.timeout or 0 }})
-        </a>
-    </div>
-
-    <!-- Stats summary -->
-    <div class="grid grid-cols-3 gap-4">
-        <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
-            <div class="flex items-center gap-3">
-                <div class="p-2 bg-green-500/20 rounded-lg">
-                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-2xl font-bold text-white">{{ stats.available or 0 }}</p>
-                    <p class="text-sm text-gray-400">Available</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
-            <div class="flex items-center gap-3">
-                <div class="p-2 bg-red-500/20 rounded-lg">
-                    <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-2xl font-bold text-white">{{ stats.failed or 0 }}</p>
-                    <p class="text-sm text-gray-400">Failed</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
-            <div class="flex items-center gap-3">
-                <div class="p-2 bg-gray-500/20 rounded-lg">
-                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-2xl font-bold text-white">{{ stats.timeout or 0 }}</p>
-                    <p class="text-sm text-gray-400">Timed Out</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Bulk select controls (admin only, only on Available tab) -->
-    {% if is_admin and current_state_filter == 'available' and requests %}
-    <div class="flex items-center justify-between bg-gray-800 rounded-lg border border-gray-700 p-3">
-        <div class="flex items-center gap-3">
-            <input type="checkbox" id="select-all"
-                   onchange="toggleSelectAll()"
-                   class="w-4 h-4 text-red-600 bg-gray-700 border-gray-600 rounded focus:ring-red-500 focus:ring-2">
-            <label for="select-all" class="text-sm text-gray-300">Select All</label>
-            <span id="selected-count" class="text-sm text-gray-500">(0 selected)</span>
-        </div>
-        <button id="bulk-delete-btn"
-                onclick="showBulkDeleteModal()"
-                class="hidden px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
-            <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-            </svg>
-            Delete Selected
-        </button>
-    </div>
-    {% endif %}
-
-    <!-- Request cards -->
-    <div id="history-content" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {% if requests %}
-            {% for req in requests %}
-                <div class="relative">
-                    <!-- Checkbox overlay (admin only, Available tab only) -->
-                    {% if is_admin and current_state_filter == 'available' %}
-                    <div class="absolute top-2 left-2 z-10">
-                        <input type="checkbox" class="item-checkbox w-5 h-5 text-red-600 bg-gray-700 border-gray-600 rounded focus:ring-red-500 focus:ring-2"
-                               data-request-id="{{ req.id }}"
-                               data-title="{{ req.title }}"
-                               onchange="updateSelectionCount()">
-                    </div>
-                    {% endif %}
-                    {% set request = req %}
-                    {% include "components/card.html" %}
-                </div>
+<!-- Header: filters + sync -->
+<div class="card-head" style="margin-bottom: 0;">
+    <span class="when">{{ requests|length }} completed request{% if requests|length != 1 %}s{% endif %}</span>
+    <div class="filterbar">
+        {% if users %}
+        <label for="user-filter">filter by user:</label>
+        <select id="user-filter" onchange="applyFilters()">
+            <option value="">All users</option>
+            {% for user in users %}
+                <option value="{{ user }}" {% if current_user_filter == user %}selected{% endif %}>{{ user }}</option>
             {% endfor %}
-        {% else %}
-            <div class="col-span-full text-center py-12">
-                <svg class="mx-auto h-12 w-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                </svg>
-                <h3 class="mt-2 text-lg font-medium text-gray-300">No history yet</h3>
-                <p class="mt-1 text-gray-500">Completed requests will appear here.</p>
-            </div>
+        </select>
+        {% endif %}
+        {% if is_admin %}
+        <button id="sync-library-btn" onclick="showSyncModal()" class="btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Sync Library
+        </button>
         {% endif %}
     </div>
 </div>
 
+<!-- State filter tabs -->
+<div class="tabs">
+    <a href="/history" class="tab {% if not current_state_filter %}active{% endif %}">All</a>
+    <a href="/history?state=available" class="tab st-available {% if current_state_filter == 'available' %}active{% endif %}">
+        Ready ({{ stats.available or 0 }})</a>
+    <a href="/history?state=failed" class="tab st-failed {% if current_state_filter == 'failed' %}active{% endif %}">
+        Failed ({{ stats.failed or 0 }})</a>
+    <a href="/history?state=timeout" class="tab st-timeout {% if current_state_filter == 'timeout' %}active{% endif %}">
+        Timeout ({{ stats.timeout or 0 }})</a>
+</div>
+
+<!-- Stats summary -->
+<div class="tiles">
+    <div class="tile st-available"><div class="n">{{ stats.available or 0 }}</div><div class="l">Available</div></div>
+    <div class="tile st-failed"><div class="n">{{ stats.failed or 0 }}</div><div class="l">Failed</div></div>
+    <div class="tile st-timeout"><div class="n">{{ stats.timeout or 0 }}</div><div class="l">Timed Out</div></div>
+</div>
+
+<!-- Bulk select controls (admin only, only on Available tab) -->
+{% if is_admin and current_state_filter == 'available' and requests %}
+<div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <input type="checkbox" id="select-all" class="danger" onchange="toggleSelectAll()">
+        <label for="select-all" style="font-size: 12px; color: var(--muted);">Select All</label>
+        <span id="selected-count" class="when">(0 selected)</span>
+    </div>
+    <button id="bulk-delete-btn" onclick="showBulkDeleteModal()" class="btn danger hidden">
+        Delete Selected
+    </button>
+</div>
+{% endif %}
+
+<!-- Request cards -->
+<div id="history-content" class="cards">
+    {% if requests %}
+        {% for req in requests %}
+            <div style="position: relative;">
+                <!-- Checkbox overlay (admin only, Available tab only) -->
+                {% if is_admin and current_state_filter == 'available' %}
+                <div style="position: absolute; top: 8px; left: 8px; z-index: 10;">
+                    <input type="checkbox" class="item-checkbox danger"
+                           data-request-id="{{ req.id }}"
+                           data-title="{{ req.title }}"
+                           onchange="updateSelectionCount()">
+                </div>
+                {% endif %}
+                {% set request = req %}
+                {% include "components/card.html" %}
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty" style="grid-column: 1 / -1;">
+            <b>No history yet</b>
+            Completed requests will appear here.
+        </div>
+    {% endif %}
+</div>
+
 <!-- Library Sync Modal (admin only) -->
 {% if is_admin %}
-<div id="sync-modal" class="fixed inset-0 z-50 hidden">
-    <!-- Backdrop -->
-    <div class="fixed inset-0 bg-black/70" onclick="hideSyncModal()"></div>
-
-    <!-- Modal content -->
-    <div class="fixed inset-0 flex items-center justify-center p-4">
-        <div class="bg-gray-800 rounded-lg border border-gray-700 max-w-md w-full p-6 relative">
+<div id="sync-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="hideSyncModal()"></div>
+    <div class="modal-wrap">
+        <div class="modal-panel">
             <!-- Initial state -->
             <div id="sync-initial">
-                <h3 class="text-xl font-bold text-white mb-4">Sync Library</h3>
-
-                <p class="text-gray-300 mb-4">
+                <h3>// sync library</h3>
+                <p style="color: var(--muted); font-size: 13px;">
                     Import existing media from Jellyfin to the status dashboard.
                     This will create entries for all available content not yet tracked.
                 </p>
-
-                <div class="bg-blue-900/30 border border-blue-600/50 rounded-lg p-3 mb-6">
-                    <p class="text-sm text-blue-300">
-                        <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                        Jellyfin library will be rescanned first to ensure fresh data.
-                    </p>
+                <div class="inset note">
+                    Jellyfin library will be rescanned first to ensure fresh data.
                 </div>
-
-                <div class="flex justify-end space-x-3">
-                    <button onclick="hideSyncModal()"
-                            class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors">
-                        Cancel
-                    </button>
-                    <button onclick="startSync()"
-                            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
-                        Start Sync
-                    </button>
+                <div class="modal-actions">
+                    <button onclick="hideSyncModal()" class="btn">Cancel</button>
+                    <button onclick="startSync()" class="btn primary">Start Sync</button>
                 </div>
             </div>
 
             <!-- Loading state -->
             <div id="sync-loading" class="hidden">
-                <div class="text-center py-8">
-                    <svg class="animate-spin h-12 w-12 text-blue-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <p class="text-lg font-medium text-white mb-2">Syncing Library...</p>
-                    <p class="text-sm text-gray-400">Scanning Jellyfin, Radarr, and Sonarr</p>
+                <div class="center" style="padding: 32px 0;">
+                    <span class="spin lg" style="margin: 0 auto 16px; display: block;"></span>
+                    <p style="color: var(--ink); margin: 0 0 4px;">Syncing library…</p>
+                    <p class="hint">Scanning Jellyfin, Radarr, and Sonarr</p>
                 </div>
             </div>
 
             <!-- Results state -->
             <div id="sync-results" class="hidden">
-                <h3 class="text-xl font-bold text-white mb-4">Sync Complete</h3>
-
-                <div class="space-y-3 mb-6">
-                    <div class="flex justify-between items-center p-3 bg-gray-900 rounded-lg">
-                        <span class="text-gray-300">Total Scanned</span>
-                        <span id="sync-total" class="font-bold text-white">0</span>
-                    </div>
-                    <div class="flex justify-between items-center p-3 bg-green-900/30 rounded-lg">
-                        <span class="text-green-300">Added</span>
-                        <span id="sync-added" class="font-bold text-green-400">0</span>
-                    </div>
-                    <div class="flex justify-between items-center p-3 bg-blue-900/30 rounded-lg">
-                        <span class="text-blue-300">Updated (filled missing IDs)</span>
-                        <span id="sync-updated" class="font-bold text-blue-400">0</span>
-                    </div>
-                    <div class="flex justify-between items-center p-3 bg-gray-900 rounded-lg">
-                        <span class="text-gray-300">Skipped (already tracked)</span>
-                        <span id="sync-skipped" class="font-bold text-gray-400">0</span>
-                    </div>
-                    <div id="sync-errors-row" class="hidden flex justify-between items-center p-3 bg-red-900/30 rounded-lg">
-                        <span class="text-red-300">Errors</span>
-                        <span id="sync-errors" class="font-bold text-red-400">0</span>
-                    </div>
+                <h3>// sync complete</h3>
+                <div style="margin-bottom: 18px;">
+                    <div class="statline"><span class="sub">Total Scanned</span><b id="sync-total">0</b></div>
+                    <div class="statline st-available"><span class="sub">Added</span><b id="sync-added">0</b></div>
+                    <div class="statline st-approved"><span class="sub">Updated (filled missing IDs)</span><b id="sync-updated">0</b></div>
+                    <div class="statline"><span class="sub">Skipped (already tracked)</span><b id="sync-skipped">0</b></div>
+                    <div id="sync-errors-row" class="statline st-failed hidden"><span class="sub">Errors</span><b id="sync-errors">0</b></div>
                 </div>
-
-                <div class="flex justify-end">
-                    <button onclick="closeSyncAndRefresh()"
-                            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
-                        Done
-                    </button>
+                <div class="modal-actions">
+                    <button onclick="closeSyncAndRefresh()" class="btn primary">Done</button>
                 </div>
             </div>
 
             <!-- Error state -->
             <div id="sync-error" class="hidden">
-                <h3 class="text-xl font-bold text-red-400 mb-4">Sync Failed</h3>
-                <p id="sync-error-message" class="text-gray-300 mb-6"></p>
-                <div class="flex justify-end">
-                    <button onclick="hideSyncModal()"
-                            class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors">
-                        Close
-                    </button>
+                <h3 class="danger">// sync failed</h3>
+                <p id="sync-error-message" style="color: var(--muted); font-size: 13px;"></p>
+                <div class="modal-actions">
+                    <button onclick="hideSyncModal()" class="btn">Close</button>
                 </div>
             </div>
         </div>
@@ -267,66 +148,47 @@
 
 <!-- Bulk Delete Confirmation Modal (admin only) -->
 {% if is_admin %}
-<div id="bulk-delete-modal" class="fixed inset-0 z-50 hidden">
-    <!-- Backdrop -->
-    <div class="fixed inset-0 bg-black/70" onclick="hideBulkDeleteModal()"></div>
+<div id="bulk-delete-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="hideBulkDeleteModal()"></div>
+    <div class="modal-wrap">
+        <div class="modal-panel">
+            <h3 class="danger">// delete selected media</h3>
 
-    <!-- Modal content -->
-    <div class="fixed inset-0 flex items-center justify-center p-4">
-        <div class="bg-gray-800 rounded-lg border border-gray-700 max-w-md w-full p-6 relative">
-            <h3 class="text-xl font-bold text-white mb-4">Delete Selected Media</h3>
-
-            <p class="text-gray-300 mb-4">
-                Are you sure you want to delete <span id="bulk-delete-count" class="font-semibold text-white">0</span> items?
+            <p style="color: var(--muted); font-size: 13px;">
+                Are you sure you want to delete <b id="bulk-delete-count" style="color: var(--ink);">0</b> items?
             </p>
 
-            <div class="bg-gray-900 rounded-lg p-4 mb-4 max-h-40 overflow-y-auto">
-                <ul id="bulk-delete-list" class="text-sm text-gray-300 space-y-1">
+            <div class="inset" style="max-height: 160px; overflow-y: auto;">
+                <ul id="bulk-delete-list" style="margin: 0; padding-left: 18px; color: var(--muted);">
                     <!-- Populated by JavaScript -->
                 </ul>
             </div>
 
             <!-- Delete files checkbox -->
-            <div class="flex items-center mb-6">
-                <input type="checkbox" id="bulk-delete-files" checked
-                       class="w-4 h-4 text-red-600 bg-gray-700 border-gray-600 rounded focus:ring-red-500 focus:ring-2">
-                <label for="bulk-delete-files" class="ml-2 text-sm text-gray-300">
+            <div style="display: flex; align-items: center; gap: 8px; margin: 14px 0;">
+                <input type="checkbox" id="bulk-delete-files" class="danger" checked>
+                <label for="bulk-delete-files" style="font-size: 12px; color: var(--muted);">
                     Delete files from disk
                 </label>
             </div>
 
             {% if not deletion_sync_enabled %}
-            <div class="bg-yellow-900/50 border border-yellow-600/50 rounded-lg p-3 mb-4">
-                <p class="text-sm text-yellow-300">
-                    <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                    </svg>
-                    Deletion sync is disabled. Only status-tracker records will be removed.
-                </p>
+            <div class="inset warn">
+                ⚠ Deletion sync is disabled. Only status-tracker records will be removed.
             </div>
             {% endif %}
 
-            <div class="flex justify-end space-x-3">
-                <button onclick="hideBulkDeleteModal()"
-                        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors">
-                    Cancel
-                </button>
-                <button onclick="confirmBulkDelete()"
-                        id="bulk-delete-confirm-btn"
-                        class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors">
-                    Delete All
-                </button>
+            <div class="modal-actions">
+                <button onclick="hideBulkDeleteModal()" class="btn">Cancel</button>
+                <button onclick="confirmBulkDelete()" id="bulk-delete-confirm-btn" class="btn danger">Delete All</button>
             </div>
 
             <!-- Loading state -->
-            <div id="bulk-delete-loading" class="hidden absolute inset-0 bg-gray-800/90 flex items-center justify-center rounded-lg">
-                <div class="text-center">
-                    <svg class="animate-spin h-8 w-8 text-red-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <p class="text-gray-300">Deleting...</p>
-                    <p id="bulk-delete-progress" class="text-sm text-gray-500 mt-1">0 / 0</p>
+            <div id="bulk-delete-loading" class="overlay hidden">
+                <div class="center">
+                    <span class="spin lg danger" style="margin: 0 auto 10px; display: block;"></span>
+                    <p style="color: var(--muted); margin: 0;">Deleting…</p>
+                    <p id="bulk-delete-progress" class="hint">0 / 0</p>
                 </div>
             </div>
         </div>
@@ -411,13 +273,7 @@
         list.innerHTML = '';
         selectedItems.forEach((title, id) => {
             const li = document.createElement('li');
-            li.className = 'flex items-center';
-            li.innerHTML = `
-                <svg class="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-                ${title}
-            `;
+            li.textContent = title;
             list.appendChild(li);
         });
 

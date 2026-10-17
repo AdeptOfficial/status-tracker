@@ -6,10 +6,12 @@ Media request lifecycle tracker for Jellyseerr -> Jellyfin pipeline.
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db, async_session
@@ -319,6 +321,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Static assets (AdepT token stylesheet + emblem)
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 # Include routers
 app.include_router(webhooks_router)

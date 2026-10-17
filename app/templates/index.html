@@ -1,50 +1,43 @@
 {% extends "base.html" %}
 
-{% block title %}Active Requests - Status Tracker{% endblock %}
+{% block title %}active — status-tracker{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-    <!-- Connection status indicator (fixed, not refreshed) -->
-    <div class="flex justify-end">
-        <div class="flex items-center space-x-2">
-            <span class="text-sm text-gray-400" id="update-status">Connecting...</span>
-            <div id="connection-dot" class="w-2 h-2 bg-yellow-500 rounded-full"></div>
-        </div>
-    </div>
+<!-- Prompt line + connection status (fixed, not refreshed) -->
+<p class="motd">adept@lab:~$ ./tracker --active<span class="cursor">▋</span>
+    <span class="right">
+        <span class="when" id="update-status">Connecting...</span>
+        <span id="connection-dot" class="light wait"></span>
+    </span>
+</p>
 
-    <!-- Refreshable content area (includes header + cards) -->
-    <div id="request-list"
-         hx-get="/"
-         hx-trigger="status-update"
-         hx-select="#request-list"
-         hx-swap="outerHTML">
+<!-- Refreshable content area (includes header + cards) -->
+<div id="request-list"
+     hx-get="/"
+     hx-trigger="status-update"
+     hx-select="#request-list"
+     hx-swap="outerHTML">
 
-        <!-- Header with stats -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-700 pb-4 mb-4">
-            <div>
-                <h1 class="text-2xl font-bold">Active Requests</h1>
-                <p class="text-gray-400">{{ requests|length }} request{% if requests|length != 1 %}s{% endif %} in progress</p>
-            </div>
+    <section class="card">
+        <div class="card-head">
+            <h2>// active requests</h2>
+            <span class="when">{{ requests|length }} request{% if requests|length != 1 %}s{% endif %} in progress</span>
         </div>
 
         <!-- Request cards grid -->
-        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {% if requests %}
+        <div class="cards">
             {% for request in requests %}
                 {% include "components/card.html" %}
             {% endfor %}
-        {% else %}
-            <div class="col-span-full text-center py-12">
-                <svg class="mx-auto h-12 w-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <h3 class="mt-2 text-lg font-medium text-gray-300">No active requests</h3>
-                <p class="mt-1 text-gray-500">Ready for requests.</p>
-            </div>
-        {% endif %}
         </div>
-    </div>
+        {% else %}
+        <div class="empty">
+            <b>No active requests</b>
+            Ready for requests.
+        </div>
+        {% endif %}
+    </section>
 </div>
 {% endblock %}
 
@@ -67,13 +60,13 @@
         if (!dot || !status) return;
 
         if (connected) {
-            dot.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse';
+            dot.className = 'light live';
             status.textContent = message || 'Live updates active';
-            status.className = 'text-sm text-green-400';
+            status.className = 'when stext live';
         } else {
-            dot.className = 'w-2 h-2 bg-red-500 rounded-full';
+            dot.className = 'light lost';
             status.textContent = message || 'Disconnected';
-            status.className = 'text-sm text-red-400';
+            status.className = 'when stext lost';
         }
     }
 

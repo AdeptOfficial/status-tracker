@@ -86,7 +86,7 @@ app/
 │   ├── sse.py           # GET /api/sse (real-time updates)
 │   └── pages.py         # HTML dashboard routes
 └── templates/
-    ├── base.html        # Base layout (Tailwind + htmx)
+    ├── base.html        # Base layout (AdepT token CSS + htmx)
     ├── index.html       # Active requests page
     ├── detail.html      # Request detail + timeline + delete
     ├── history.html     # Completed requests + bulk delete
@@ -104,7 +104,7 @@ app/
 | 1 | Foundation + Plugin Framework | ✅ Complete |
 | 2 | Sonarr/Radarr Plugins | ✅ Complete |
 | 3 | qBittorrent Plugin | ✅ Complete |
-| 4 | Web Dashboard (htmx + Tailwind) | ✅ Complete |
+| 4 | Web Dashboard (htmx + AdepT token CSS) | ✅ Complete |
 | 5 | Real-Time Updates (SSE) | ⚠️ Partial (detail page bug) |
 | 6 | Shoko Plugin (SignalR) | ⚠️ Partial (movies only) |
 | 7 | Jellyfin Plugin | ✅ Complete |
