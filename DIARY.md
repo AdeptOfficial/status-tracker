@@ -6,6 +6,24 @@ Development log for the status-tracker project. New entries at the top.
 
 ---
 
+## 2026-10-17: Fix "47/22 ready" episode counters
+
+- Cards/detail counted every episode row on a request; whole-series webhooks can
+  attach other seasons' rows to a one-season request. New `season_episodes()`
+  helper scopes display counting to the request's season; totals clamp to
+  max(metadata, actual rows). 4 regression tests; 91/91 green. Display-only —
+  correlator/aggregation behavior untouched.
+
+## 2026-10-17: Test suite resurrected — 87/87 green
+
+- Webhook fixtures were never lost: the January reorg moved them into
+  `docs/archive/`; they now live properly in `tests/fixtures/webhooks/` (symlink
+  and run_tests.sh hack removed). services↔clients circular import broken with a
+  lazy import in `clients/shoko.py` (no behavior change).
+- 7 stale tests updated to current design: polling asserts constants not old
+  literals; anime Shoko-match tests expect ANIME_MATCHING + Jellyfin verification
+  trigger instead of direct AVAILABLE. Issue filed+resolved in `issues/resolved/`.
+
 ## 2026-10-17: AdepT branding — Tailwind CDN removed, vanilla token CSS
 
 - Full restyle to the AdepT brand (canonical: `~/git/adeptproductions/branding/README.md`,

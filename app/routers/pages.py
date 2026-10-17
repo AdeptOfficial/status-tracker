@@ -28,6 +28,9 @@ router = APIRouter(tags=["pages"])
 templates_dir = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
 
+from app.services.state_calculator import season_episodes  # noqa: E402
+templates.env.globals["season_episodes"] = season_episodes
+
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(

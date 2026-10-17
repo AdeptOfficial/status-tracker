@@ -191,21 +191,25 @@ class TestShokoEpisodeMatching:
 
         event = MockFileEvent()
 
-        with patch("app.plugins.shoko.broadcaster") as mock_broadcaster:
+        with patch("app.plugins.shoko.broadcaster") as mock_broadcaster, \
+             patch("app.services.jellyfin_verifier.verify_jellyfin_availability",
+                   new_callable=AsyncMock) as mock_verify:
             mock_broadcaster.broadcast_update = AsyncMock()
 
             await _handle_tv_episode_matched(ep1, event, db_session)
 
-        # Episode 1 should be AVAILABLE
-        assert ep1.state == EpisodeState.AVAILABLE
+        # A Shoko match no longer sets AVAILABLE directly: the episode stays in
+        # ANIME_MATCHING until Jellyfin verification confirms it exists.
+        assert ep1.state == EpisodeState.ANIME_MATCHING
         assert ep1.shoko_file_id == "12345"
 
-        # Episodes 2-3 still ANIME_MATCHING
-        # Request state: still ANIME_MATCHING (not all episodes available)
+        # Jellyfin verification was triggered for the parent request
+        mock_verify.assert_called_once_with(request.id, request.tmdb_id or 0)
 
     @pytest.mark.asyncio
-    async def test_all_episodes_available_transitions_request(self, db_session):
-        """When all episodes AVAILABLE, request transitions to AVAILABLE."""
+    async def test_match_defers_available_to_jellyfin_verification(self, db_session):
+        """Even for the LAST pending episode, a Shoko match only triggers Jellyfin
+        verification — the verifier (not the match) flips states to AVAILABLE."""
         from app.plugins.shoko import _handle_tv_episode_matched
 
         @dataclass
@@ -250,23 +254,26 @@ class TestShokoEpisodeMatching:
 
         event = MockFileEvent()
 
-        with patch("app.plugins.shoko.broadcaster") as mock_broadcaster:
+        with patch("app.plugins.shoko.broadcaster") as mock_broadcaster, \
+             patch("app.services.jellyfin_verifier.verify_jellyfin_availability",
+                   new_callable=AsyncMock) as mock_verify:
             mock_broadcaster.broadcast_update = AsyncMock()
 
             await _handle_tv_episode_matched(last_ep, event, db_session)
 
-        # Last episode should be AVAILABLE
-        assert last_ep.state == EpisodeState.AVAILABLE
+        # The match keeps the episode pending; Jellyfin verification decides AVAILABLE
+        assert last_ep.state == EpisodeState.ANIME_MATCHING
+        assert last_ep.shoko_file_id == "99999"
+        mock_verify.assert_called_once_with(request.id, request.tmdb_id or 0)
 
-        # Reload request
+        # Reload request — it must NOT have been flipped to AVAILABLE by the match;
+        # that is the Jellyfin verifier's decision.
         stmt = select(MediaRequest).where(MediaRequest.id == request.id).options(
             selectinload(MediaRequest.episodes)
         )
         result = await db_session.execute(stmt)
         request = result.scalar_one()
-
-        # All episodes AVAILABLE → request AVAILABLE
-        assert request.state == RequestState.AVAILABLE
+        assert request.state == RequestState.ANIME_MATCHING
 
     @pytest.mark.asyncio
     async def test_shoko_episode_detected_no_crossrefs(self, db_session):

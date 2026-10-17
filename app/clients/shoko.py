@@ -28,7 +28,9 @@ from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
 
 from app.config import settings
-from app.services.jellyfin_verifier import verify_movie_by_tmdb
+# NOTE: app.services.jellyfin_verifier is imported lazily inside the handler that
+# needs it — a module-level import here creates a circular import
+# (services/__init__ -> deletion_orchestrator -> clients.shoko -> services.…).
 
 logger = logging.getLogger(__name__)
 
@@ -325,6 +327,7 @@ class ShokoClient:
 
                 # Directly trigger Jellyfin verification for this TMDB ID
                 # This runs as a background task to not block SignalR processing
+                from app.services.jellyfin_verifier import verify_movie_by_tmdb
                 asyncio.create_task(verify_movie_by_tmdb(movie_id))
 
         except Exception as e:

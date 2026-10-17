@@ -89,11 +89,12 @@
 
         <!-- Episode progress for TV shows -->
         {% if request.media_type.value == 'tv' and (request.episodes or request.total_episodes) %}
-            {% set grabbed_eps = request.episodes|length %}
-            {% set available_eps = request.episodes|selectattr('state.value', 'equalto', 'available')|list|length %}
-            {% set downloading_eps = request.episodes|selectattr('state.value', 'equalto', 'downloading')|list|length %}
-            {% set grabbing_eps = request.episodes|selectattr('state.value', 'equalto', 'grabbing')|list|length %}
-            {% set total_eps = request.total_episodes or grabbed_eps %}
+            {% set eps = season_episodes(request) %}
+            {% set grabbed_eps = eps|length %}
+            {% set available_eps = eps|selectattr('state.value', 'equalto', 'available')|list|length %}
+            {% set downloading_eps = eps|selectattr('state.value', 'equalto', 'downloading')|list|length %}
+            {% set grabbing_eps = eps|selectattr('state.value', 'equalto', 'grabbing')|list|length %}
+            {% set total_eps = [request.total_episodes or 0, grabbed_eps]|max %}
             <div class="eps">
                 <div class="barline">
                     <span style="letter-spacing: .15em; text-transform: uppercase; font-size: 10.5px;">Episodes</span>
@@ -128,7 +129,7 @@
                 <details style="margin-top: 8px;" onclick="event.stopPropagation();">
                     <summary>Show episodes</summary>
                     <div class="eplist">
-                        {% for ep in request.episodes %}
+                        {% for ep in eps %}
                             {% set ep_state_icons = {
                                 'grabbing': '○',
                                 'downloading': '⬇',

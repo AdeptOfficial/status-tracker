@@ -515,7 +515,7 @@ class TestAdaptivePolling:
 
     @pytest.mark.asyncio
     async def test_adaptive_polling_fast_when_downloading(self, db_session):
-        """Returns 5s interval when there are active downloads."""
+        """Returns the fast interval when there are active downloads."""
         from app.plugins.qbittorrent import QBittorrentPlugin, POLL_FAST
 
         # Create request in DOWNLOADING state
@@ -531,11 +531,10 @@ class TestAdaptivePolling:
         interval = await plugin.get_adaptive_poll_interval(db_session)
 
         assert interval == POLL_FAST
-        assert interval == 5
 
     @pytest.mark.asyncio
     async def test_adaptive_polling_fast_when_grabbing(self, db_session):
-        """Returns 5s interval when there are requests in GRABBING state."""
+        """Returns the fast interval when there are requests in GRABBING state."""
         from app.plugins.qbittorrent import QBittorrentPlugin, POLL_FAST
 
         # Create request in GRABBING state
@@ -551,11 +550,10 @@ class TestAdaptivePolling:
         interval = await plugin.get_adaptive_poll_interval(db_session)
 
         assert interval == POLL_FAST
-        assert interval == 5
 
     @pytest.mark.asyncio
     async def test_adaptive_polling_slow_when_idle(self, db_session):
-        """Returns 30s interval when no active downloads."""
+        """Returns the slow interval when no active downloads."""
         from app.plugins.qbittorrent import QBittorrentPlugin, POLL_SLOW
 
         # Create request in AVAILABLE state (not active)
@@ -571,11 +569,10 @@ class TestAdaptivePolling:
         interval = await plugin.get_adaptive_poll_interval(db_session)
 
         assert interval == POLL_SLOW
-        assert interval == 30
 
     @pytest.mark.asyncio
     async def test_adaptive_polling_slow_when_no_requests(self, db_session):
-        """Returns 30s interval when no requests at all."""
+        """Returns the slow interval when no requests at all."""
         from app.plugins.qbittorrent import QBittorrentPlugin, POLL_SLOW
 
         # No requests in database
@@ -583,11 +580,10 @@ class TestAdaptivePolling:
         interval = await plugin.get_adaptive_poll_interval(db_session)
 
         assert interval == POLL_SLOW
-        assert interval == 30
 
     @pytest.mark.asyncio
     async def test_adaptive_polling_fast_with_mixed_states(self, db_session):
-        """Returns 5s if ANY request is active, even with others idle."""
+        """Returns the fast interval if ANY request is active, even with others idle."""
         from app.plugins.qbittorrent import QBittorrentPlugin, POLL_FAST
 
         # Create multiple requests with mixed states
@@ -614,4 +610,3 @@ class TestAdaptivePolling:
 
         # Should be fast because one request is DOWNLOADING
         assert interval == POLL_FAST
-        assert interval == 5

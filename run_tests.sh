@@ -25,8 +25,6 @@ COPY app/ ./app/
 COPY tests/ ./tests/
 COPY pytest.ini .
 
-# Copy webhook fixtures (symlink doesn't work in Docker COPY)
-COPY docs/flows/captured-webhooks/ ./tests/fixtures/webhooks/
 
 ENV PYTHONUNBUFFERED=1
 ENV DATABASE_URL=sqlite:///:memory:

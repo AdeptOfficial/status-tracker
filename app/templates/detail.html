@@ -138,12 +138,13 @@
 
             <!-- Episode Progress (TV shows only) -->
             {% if media_request.media_type.value == 'tv' and (media_request.episodes or media_request.total_episodes) %}
-                {% set grabbed_eps = media_request.episodes|length %}
-                {% set available_eps = media_request.episodes|selectattr('state.value', 'equalto', 'available')|list|length %}
-                {% set downloading_eps = media_request.episodes|selectattr('state.value', 'equalto', 'downloading')|list|length %}
-                {% set grabbing_eps = media_request.episodes|selectattr('state.value', 'equalto', 'grabbing')|list|length %}
-                {% set importing_eps = media_request.episodes|selectattr('state.value', 'in', ['importing', 'anime_matching', 'downloaded'])|list|length %}
-                {% set total_eps = media_request.total_episodes or grabbed_eps %}
+                {% set eps = season_episodes(media_request) %}
+                {% set grabbed_eps = eps|length %}
+                {% set available_eps = eps|selectattr('state.value', 'equalto', 'available')|list|length %}
+                {% set downloading_eps = eps|selectattr('state.value', 'equalto', 'downloading')|list|length %}
+                {% set grabbing_eps = eps|selectattr('state.value', 'in', ['grabbing'])|list|length %}
+                {% set importing_eps = eps|selectattr('state.value', 'in', ['importing', 'anime_matching', 'downloaded'])|list|length %}
+                {% set total_eps = [media_request.total_episodes or 0, grabbed_eps]|max %}
                 {% set pending_eps = total_eps - grabbed_eps %}
 
                 {% set ep_state_labels = {
@@ -201,7 +202,7 @@
 
                     <!-- Episode list -->
                     <div style="display: grid; gap: 6px; max-height: 260px; overflow-y: auto;">
-                        {% for ep in media_request.episodes %}
+                        {% for ep in eps %}
                             <div class="statline" style="margin-bottom: 0;">
                                 <span style="display: flex; gap: 10px; min-width: 0; align-items: baseline;">
                                     <span class="sub" style="flex-shrink: 0;">S{{ "%02d"|format(ep.season_number) }}E{{ "%02d"|format(ep.episode_number) }}</span>

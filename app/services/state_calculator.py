@@ -105,3 +105,18 @@ def get_episode_progress(request: "MediaRequest") -> tuple[int, int]:
 
     completed = sum(1 for ep in episodes if ep.state == EpisodeState.AVAILABLE)
     return (completed, len(episodes))
+
+
+def season_episodes(request: "MediaRequest") -> list:
+    """Episode rows belonging to the request's own season.
+
+    Whole-series webhooks can attach other seasons' rows to a single-season
+    request (seen in prod: an S02/22-episode request carrying 47 rows across
+    S01+S02 → "47/22 ready"). Display must only count the requested season.
+    Falls back to all rows when the request has no season or nothing matches.
+    """
+    eps = request.episodes or []
+    if request.season:
+        scoped = [ep for ep in eps if ep.season_number == request.season]
+        return scoped or eps
+    return eps
