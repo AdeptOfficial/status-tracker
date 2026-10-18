@@ -336,6 +336,8 @@ class Episode(Base):
     # Download tracking (shared for season packs)
     qbit_hash: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
 
+    download_progress: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # File path (from Sonarr Import webhook)
     final_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
 

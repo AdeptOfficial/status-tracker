@@ -253,7 +253,7 @@ class RadarrPlugin(ServicePlugin):
         if request.is_anime:
             # Anime needs Shoko matching before Jellyfin verification
             target_state = RequestState.ANIME_MATCHING
-            details = f"Waiting for Shoko: {filename}" if filename else "Waiting for Shoko match"
+            details = f"Imported: {filename}; waiting for Shoko match" if filename else "Imported to library; waiting for Shoko match"
         else:
             # Regular movie goes directly to IMPORTING for Jellyfin verification
             target_state = RequestState.IMPORTING

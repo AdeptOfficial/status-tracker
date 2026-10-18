@@ -1,10 +1,34 @@
 # Status-Tracker Roadmap
 
-**Last Updated:** 2026-01-22
+**Last Reviewed:** 2026-10-17 (validation update; historical backlog below)
 
 Single source of truth for priorities, backlog, and deferred items.
 
 ---
+
+## Current iteration — episode progress and library repair
+
+Downloaded/ready summaries, conservative per-file percentages and permanent tests
+are implemented and dev-deployed. [Testing](TESTING.md) records 152 passing
+regressions, browser acceptance and review instructions. Desktop visual review approved; real-content mobile overflow is fixed and verified
+at five viewport widths on dev. Real request 20 has downloaded/imported all 12 episodes; Shoko/Jellyfin and playback validation remain. Production is explicitly on hold.
+The historical priorities below predate this iteration; do not reimplement these
+completed pieces from unchecked January boxes.
+
+Library-sync repair and separate History source/user filters are implemented.
+DEV History and repair-label visual review approved. Import-completion labels
+are now explicit; production remains on hold.
+
+## October 17 validation update
+
+- Current suite: 91 tests pass in an isolated container; async cleanup and
+  deprecation warnings remain recorded in the SSE issue.
+- Direct dev SSE remained connected for 45 seconds with heartbeats.
+- Isolated Firefox detail-page checks pass progress/speed/ETA/timeline updates,
+  server-restart reconnection and Ready to Watch status without page reload.
+- No current browser bug reproduced in that path. Real download-pipeline and
+  proxy-path verification remain distinct; do not assume old open reports are
+  newly reproduced. See [browser evidence](../issues/detail-page-live-updates-bug.md).
 
 ## Current Priorities
 
@@ -13,7 +37,7 @@ Work on these in order:
 | Priority | Task | Issue/Notes |
 |----------|------|-------------|
 | 1 | **Test SSE heartbeat stability** | Should stay connected >15s now. `issues/sse-connections-dropping.md` |
-| 2 | **Fix IMPORTING state skipped for anime** | Goes DOWNLOADED → ANIME_MATCHING, skipping IMPORTING. `docs/issues/2026-01-22-importing-state-skipped-for-anime.md` |
+| 2 | **Import timeline visibility — fixed on DEV** | Import-complete events say Imported; current Matching state retained. `issues/2026-01-22-importing-state-skipped-for-anime.md` |
 | 3 | **Episode progress UI** | Show "x downloaded, y ready" not just "x ready". `issues/ui-episode-progress-improvements.md` |
 | 4 | **Library sync: populate missing IDs** | Sync button should fill missing jellyfin_id, tvdb_id, etc. `issues/library-sync-should-populate-missing-ids.md` |
 

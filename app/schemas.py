@@ -99,6 +99,7 @@ class EpisodeResponse(BaseModel):
     episode_tvdb_id: Optional[int] = None
 
     # Download tracking
+    download_progress: Optional[float] = None
     qbit_hash: Optional[str] = None
 
     # File path

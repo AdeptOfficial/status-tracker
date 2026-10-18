@@ -24,3 +24,7 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Browser test dependencies and artifacts
+tests/browser/node_modules/
+tests/browser/result.png

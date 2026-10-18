@@ -1,7 +1,7 @@
 # Bug: IMPORTING State Skipped for Anime
 
 **Priority:** Medium
-**Status:** Open
+**Status:** Timeline visibility fixed on DEV; original transition proposal superseded
 **Created:** 2026-01-22
 **Category:** Bug / State Machine
 
@@ -61,3 +61,21 @@ The state machine allows direct transition from DOWNLOADED → ANIME_MATCHING. T
 - MVP.md state machine documentation
 - `app/plugins/radarr.py` - import webhook handler
 - `app/plugins/sonarr.py` - import webhook handler
+
+## October 17 review and resolution
+
+Current Radarr/Sonarr import handlers intentionally route anime to matching after
+receiving import-complete notifications. Existing movie/TV flow tests depend on
+that routing. Forcing an unobserved in-progress import state here would obscure
+what is actually pending (Shoko/Jellyfin), not measure import duration.
+
+Timeline now labels Radarr/Sonarr `Import` events **Imported**, independent of
+current lifecycle state. Radarr anime details explicitly say imported and waiting
+for Shoko. Current status remains Matching until verification; no transition,
+listener, timeout or episode-state logic changed. Existing history renders the
+new label without rewriting data. This addresses the missing import visibility;
+a true live import-progress stage would require a reliable start/progress signal.
+
+137 regressions pass, including actual anime movie/TV handlers and labels for
+available/downloading/matching states. Existing warnings remain. No new download
+was triggered; current end-to-end media pipeline validation remains outstanding.

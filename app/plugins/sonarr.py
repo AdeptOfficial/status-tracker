@@ -233,6 +233,7 @@ class SonarrPlugin(ServicePlugin):
             if existing:
                 # Update hash if different (new grab for same episode)
                 if download_id and existing.qbit_hash != download_id:
+                    existing.download_progress = None
                     existing.qbit_hash = download_id
                     existing.state = EpisodeState.GRABBING
                     logger.debug(f"Updated existing episode S{season_num:02d}E{episode_num:02d} with new hash")

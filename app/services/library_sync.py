@@ -9,7 +9,8 @@ Flow:
 2. Fetch existing tracked IDs from status-tracker DB
 3. Filter out already-tracked items
 4. Fetch all from Radarr/Sonarr for ID enrichment
-5. Create AVAILABLE entries with all correlation IDs populated
+5. Create AVAILABLE entries with available correlation IDs
+6. Safely fill missing metadata on existing entries without changing status
 """
 
 import logging
@@ -126,13 +127,15 @@ class LibrarySyncService:
         # Step 5: Update existing entries with missing metadata (Phase 2)
         logger.info("Phase 2: Updating existing entries with missing metadata...")
         try:
-            result.updated = await self._update_missing_metadata(
-                jellyfin_items=jellyfin_items,
-                radarr_by_tmdb=radarr_by_tmdb,
-                sonarr_by_tvdb=sonarr_by_tvdb,
-            )
+            async with self.db.begin_nested():
+                result.updated = await self._update_missing_metadata(
+                    jellyfin_items=jellyfin_items,
+                    radarr_by_tmdb=radarr_by_tmdb,
+                    sonarr_by_tvdb=sonarr_by_tvdb,
+                )
             logger.info(f"Phase 2 complete: {result.updated} entries updated")
         except Exception as e:
+            result.errors += 1
             error_msg = f"Error in metadata update phase: {e}"
             result.error_details.append(error_msg)
             logger.error(error_msg)
@@ -147,7 +150,7 @@ class LibrarySyncService:
 
         return result
 
-    async def _get_existing_ids(self) -> tuple[set[int], set[int], set[str]]:
+    async def _get_existing_ids(self) -> tuple[set[tuple[str, int]], set[tuple[str, int]], set[str]]:
         """
         Fetch existing tracked IDs from the database.
 
@@ -157,13 +160,14 @@ class LibrarySyncService:
         stmt = select(
             MediaRequest.tmdb_id,
             MediaRequest.tvdb_id,
-            MediaRequest.jellyfin_id
+            MediaRequest.jellyfin_id,
+            MediaRequest.media_type
         )
         result = await self.db.execute(stmt)
         rows = result.all()
 
-        tmdb_ids = {r[0] for r in rows if r[0] is not None}
-        tvdb_ids = {r[1] for r in rows if r[1] is not None}
+        tmdb_ids = {(r[3].value, r[0]) for r in rows if r[0] is not None}
+        tvdb_ids = {(r[3].value, r[1]) for r in rows if r[1] is not None}
         jellyfin_ids = {r[2] for r in rows if r[2] is not None}
 
         return tmdb_ids, tvdb_ids, jellyfin_ids
@@ -171,8 +175,8 @@ class LibrarySyncService:
     async def _process_jellyfin_item(
         self,
         item: dict,
-        existing_tmdb_ids: set[int],
-        existing_tvdb_ids: set[int],
+        existing_tmdb_ids: set[tuple[str, int]],
+        existing_tvdb_ids: set[tuple[str, int]],
         existing_jellyfin_ids: set[str],
         radarr_by_tmdb: dict[int, dict],
         sonarr_by_tvdb: dict[int, dict],
@@ -192,19 +196,22 @@ class LibrarySyncService:
         jellyfin_id = item.get("Id")
         item_type = item.get("Type")  # "Movie" or "Series"
         title = item.get("Name", "Unknown")
-        provider_ids = item.get("ProviderIds", {})
+        provider_ids = item.get("ProviderIds") or {}
+        if not jellyfin_id:
+            return "skipped"
 
         # Extract provider IDs (Jellyfin uses string keys)
         tmdb_id = self._parse_int(provider_ids.get("Tmdb"))
         tvdb_id = self._parse_int(provider_ids.get("Tvdb"))
-        imdb_id = provider_ids.get("Imdb")  # Keep as string
 
-        # Check if already tracked (by any ID)
+        type_key = "movie" if item_type == "Movie" else "tv"
+
+        # Provider identifiers are scoped to the media type.
         if jellyfin_id and jellyfin_id in existing_jellyfin_ids:
             return "skipped"
-        if tmdb_id and tmdb_id in existing_tmdb_ids:
+        if tmdb_id and (type_key, tmdb_id) in existing_tmdb_ids:
             return "skipped"
-        if tvdb_id and tvdb_id in existing_tvdb_ids:
+        if tvdb_id and (type_key, tvdb_id) in existing_tvdb_ids:
             return "skipped"
 
         # Determine media type
@@ -235,7 +242,7 @@ class LibrarySyncService:
         # Jellyfin may have poster as ImageTags or PrimaryImageTag
         # Use the external JELLYFIN_URL for user-facing links
         poster_url = None
-        if item.get("ImageTags", {}).get("Primary"):
+        if (item.get("ImageTags") or {}).get("Primary") or item.get("PrimaryImageTag"):
             poster_url = f"{settings.JELLYFIN_URL}/Items/{jellyfin_id}/Images/Primary"
 
         # Create the request entry
@@ -274,9 +281,9 @@ class LibrarySyncService:
         if jellyfin_id:
             existing_jellyfin_ids.add(jellyfin_id)
         if tmdb_id:
-            existing_tmdb_ids.add(tmdb_id)
+            existing_tmdb_ids.add((type_key, tmdb_id))
         if tvdb_id:
-            existing_tvdb_ids.add(tvdb_id)
+            existing_tvdb_ids.add((type_key, tvdb_id))
 
         logger.debug(f"Added: {title} ({media_type.value})")
         return "added"
@@ -284,10 +291,11 @@ class LibrarySyncService:
     @staticmethod
     def _parse_int(value) -> int | None:
         """Safely parse a value to int, returning None if invalid."""
-        if value is None:
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
             return None
         try:
-            return int(value)
+            parsed = int(value)
+            return parsed if parsed > 0 else None
         except (ValueError, TypeError):
             return None
 
@@ -322,7 +330,8 @@ class LibrarySyncService:
         """
         Update existing entries with missing metadata (Phase 2 of sync).
 
-        Matches by TMDB/TVDB ID and fills in missing fields:
+        Matches by exact Jellyfin ID or unique same-type provider IDs and fills missing fields:
+        - tmdb_id / tvdb_id
         - jellyfin_id (critical for deletion sync and Watch Now links)
         - radarr_id / sonarr_id (required for deletion sync)
         - poster_url (from Jellyfin)
@@ -339,109 +348,46 @@ class LibrarySyncService:
             Count of entries updated
         """
         updated_count = 0
-
-        # Build Jellyfin lookups for efficient matching
-        jellyfin_by_tmdb: dict[int, dict] = {}  # For movies
-        jellyfin_by_tvdb: dict[int, dict] = {}  # For TV shows
-        jellyfin_by_anidb: dict[int, dict] = {}  # For Shoko-managed anime
-
-        for item in jellyfin_items:
-            provider_ids = item.get("ProviderIds", {})
-            item_type = item.get("Type")
-
-            tmdb = self._parse_int(provider_ids.get("Tmdb"))
-            tvdb = self._parse_int(provider_ids.get("Tvdb"))
-            anidb = self._parse_int(provider_ids.get("AniDB"))
-
-            if item_type == "Movie" and tmdb:
-                jellyfin_by_tmdb[tmdb] = item
-            if item_type == "Series":
-                if tvdb:
-                    jellyfin_by_tvdb[tvdb] = item
-                if anidb:
-                    jellyfin_by_anidb[anidb] = item
-
-        logger.info(
-            f"Built Jellyfin lookups: {len(jellyfin_by_tmdb)} by TMDB, "
-            f"{len(jellyfin_by_tvdb)} by TVDB, {len(jellyfin_by_anidb)} by AniDB"
-        )
-
-        # Get all entries that might need updates
-        # Only entries with at least one correlation ID can be matched
-        stmt = select(MediaRequest).where(
-            (MediaRequest.tmdb_id.isnot(None)) |
-            (MediaRequest.tvdb_id.isnot(None)) |
-            (MediaRequest.shoko_series_id.isnot(None))
-        )
-        result = await self.db.execute(stmt)
-        entries = result.scalars().all()
-
-        logger.info(f"Checking {len(entries)} existing entries for missing metadata")
-
+        entries = (await self.db.execute(select(MediaRequest))).scalars().all()
         for entry in entries:
-            updates_made = []
-
-            # --- Update missing jellyfin_id ---
-            if entry.jellyfin_id is None:
-                jf_item = None
-
-                if entry.media_type == MediaType.MOVIE and entry.tmdb_id:
-                    jf_item = jellyfin_by_tmdb.get(entry.tmdb_id)
-                    if jf_item:
-                        entry.jellyfin_id = jf_item.get("Id")
-                        updates_made.append(f"jellyfin_id={entry.jellyfin_id[:8]}...")
-
-                elif entry.media_type == MediaType.TV:
-                    # Try TVDB first (standard TV shows)
-                    if entry.tvdb_id:
-                        jf_item = jellyfin_by_tvdb.get(entry.tvdb_id)
-                        if jf_item:
-                            entry.jellyfin_id = jf_item.get("Id")
-                            updates_made.append(f"jellyfin_id={entry.jellyfin_id[:8]}... (via TVDB)")
-
-                    # Fall back to AniDB/Shoko for anime
-                    # Shoko stores AniDB ID in shoko_series_id field
-                    if entry.jellyfin_id is None and entry.shoko_series_id:
-                        jf_item = jellyfin_by_anidb.get(entry.shoko_series_id)
-                        if jf_item:
-                            entry.jellyfin_id = jf_item.get("Id")
-                            updates_made.append(f"jellyfin_id={entry.jellyfin_id[:8]}... (via AniDB)")
-
-            # --- Update missing radarr_id (movies only) ---
-            if entry.radarr_id is None and entry.media_type == MediaType.MOVIE and entry.tmdb_id:
-                radarr_movie = radarr_by_tmdb.get(entry.tmdb_id)
-                if radarr_movie:
-                    entry.radarr_id = radarr_movie.get("id")
-                    updates_made.append(f"radarr_id={entry.radarr_id}")
-
-            # --- Update missing sonarr_id (TV only) ---
-            if entry.sonarr_id is None and entry.media_type == MediaType.TV and entry.tvdb_id:
-                sonarr_show = sonarr_by_tvdb.get(entry.tvdb_id)
-                if sonarr_show:
-                    entry.sonarr_id = sonarr_show.get("id")
-                    updates_made.append(f"sonarr_id={entry.sonarr_id}")
-
-            # --- Update missing poster_url ---
-            if entry.poster_url is None and entry.jellyfin_id:
-                entry.poster_url = f"{settings.JELLYFIN_URL}/Items/{entry.jellyfin_id}/Images/Primary"
-                updates_made.append("poster_url")
-
-            # --- Update missing year ---
-            if entry.year is None:
-                jf_item = None
-                if entry.media_type == MediaType.MOVIE and entry.tmdb_id:
-                    jf_item = jellyfin_by_tmdb.get(entry.tmdb_id)
-                elif entry.media_type == MediaType.TV and entry.tvdb_id:
-                    jf_item = jellyfin_by_tvdb.get(entry.tvdb_id)
-
-                if jf_item and jf_item.get("ProductionYear"):
-                    entry.year = jf_item.get("ProductionYear")
-                    updates_made.append(f"year={entry.year}")
-
-            # If any updates were made, mark entry as updated
-            if updates_made:
+            item_type = "Movie" if entry.media_type == MediaType.MOVIE else "Series"
+            compatible = [item for item in jellyfin_items if item.get("Type") == item_type and item.get("Id")]
+            if entry.jellyfin_id:
+                candidates = [item for item in compatible if item["Id"] == entry.jellyfin_id]
+            else:
+                candidates = [item for item in compatible if any(
+                    existing is not None and existing == self._parse_int((item.get("ProviderIds") or {}).get(provider))
+                    for existing, provider in [(entry.tmdb_id, "Tmdb"), (entry.tvdb_id, "Tvdb")]
+                )]
+            # Never choose the last item returned by a library with duplicate IDs.
+            jf_item = candidates[0] if len(candidates) == 1 else None
+            if jf_item:
+                ids = jf_item.get("ProviderIds") or {}
+                conflicts = any(existing is not None and observed is not None and existing != observed
+                    for existing, observed in [(entry.tmdb_id, self._parse_int(ids.get("Tmdb"))),
+                                               (entry.tvdb_id, self._parse_int(ids.get("Tvdb")))])
+                if conflicts:
+                    jf_item = None
+            updates = {}
+            if jf_item:
+                ids = jf_item.get("ProviderIds") or {}
+                updates = {"jellyfin_id": jf_item["Id"], "tmdb_id": self._parse_int(ids.get("Tmdb")),
+                           "tvdb_id": self._parse_int(ids.get("Tvdb")), "year": jf_item.get("ProductionYear")}
+                if (jf_item.get("ImageTags") or {}).get("Primary") or jf_item.get("PrimaryImageTag"):
+                    updates["poster_url"] = f"{settings.JELLYFIN_URL}/Items/{jf_item['Id']}/Images/Primary"
+            # Service enrichment uses known provider IDs, including newly repaired IDs.
+            tmdb = entry.tmdb_id or updates.get("tmdb_id")
+            tvdb = entry.tvdb_id or updates.get("tvdb_id")
+            if entry.media_type == MediaType.MOVIE and tmdb:
+                updates["radarr_id"] = radarr_by_tmdb.get(tmdb, {}).get("id")
+            if entry.media_type == MediaType.TV and tvdb:
+                updates["sonarr_id"] = sonarr_by_tvdb.get(tvdb, {}).get("id")
+            changed = [field for field, value in updates.items()
+                       if getattr(entry, field) is None and value is not None]
+            for field in changed:
+                setattr(entry, field, updates[field])
+            if changed:
                 entry.updated_at = datetime.utcnow()
                 updated_count += 1
-                logger.info(f"Updated {entry.title}: {', '.join(updates_made)}")
-
+                logger.info("Library sync repaired request %s fields: %s", entry.id, ', '.join(changed))
         return updated_count

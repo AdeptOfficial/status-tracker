@@ -1,7 +1,7 @@
 # Status Tracker: Detail Page Live Updates Not Working
 
 **Created:** 2026-01-18
-**Status:** Open
+**Status:** Not reproduced in isolated browser acceptance (2026-10-17); real download pipeline verification pending
 **Component:** apps/status-tracker
 **Priority:** High
 
@@ -46,3 +46,45 @@ The SSE endpoint (`/api/sse`) appears to be connected, but either:
 - [ ] Speed and ETA update without refresh
 - [ ] Timeline events appear automatically
 - [ ] SSE reconnection works after disconnect
+
+## 2026-10-17 browser acceptance evidence
+
+Tested current source in real headless Firefox with a fresh profile, a temporary
+SQLite database and one synthetic movie request. The fixture mounted the current
+app read-only and used the real pages router, SSE router, broadcaster and HTMX
+handler. Production background integrations were not started. HTMX 1.9.10 loaded
+from the same CDN used by the app. No live requests, downloads or server data were
+changed. This was a local browser test, not a deployed media-pipeline test.
+
+Passed:
+- SSE connected and the page displayed “Live updates active”.
+- Server-side synthetic update changed progress from 10% to 55%, speed from
+  1 MB/s to 5 MB/s and ETA from 10m to 2m without a page reload.
+- A new timeline entry appeared through the same HTMX swap.
+- Restarting only the fixture server disconnected the stream; the existing page
+  reconnected and received a subsequent 85% update.
+- Status changed to “Ready to Watch” without a manual refresh.
+- A document marker survived updates and reconnection, establishing that the
+  result was not caused by a full-page reload.
+
+Final browser run passed. Two initial harness mistakes were corrected: speed/ETA
+fixtures must use formatted strings, and the status assertion must account for
+CSS uppercase text. Neither required an application change.
+
+Local harness/evidence: `/tmp/status-tracker-browser-test/` (`fixture.py`,
+`check.mjs`, `result.png`); temporary artifacts may be removed. Test container was
+stopped after verification. The original end-to-end report is not fully closed:
+real qBittorrent polling, proxy paths, and physical browser behavior were not
+exercised. No application fix or deployment was needed for the tested path.
+
+## 2026-10-17 dev pipeline observation attempt
+
+Read-only checks used DEV `10.0.2.20:8100` (LXC 220), not production.
+`/api/requests/active` returned zero requests; no new download was started.
+Health reports database connected, all six plugins loaded and Shoko SignalR
+connected. Historical request 19 (regular movie) records approval, grab, download,
+import and Jellyfin verification. Requests 18 (anime movie) and 17 (anime TV)
+record anime matching followed by Jellyfin verification; all have a Jellyfin ID.
+These events are dated January 26, 2026: historical evidence only, not a current
+end-to-end test or current playback verification. Fresh real-service acceptance
+remains pending an active dev request. Production was not accessed or changed.

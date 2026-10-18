@@ -33,4 +33,4 @@ CMD ["pytest"]
 EOF
 
 # Run tests
-docker run --rm status-tracker-test pytest "$@"
+docker run --rm --network none status-tracker-test pytest "$@"

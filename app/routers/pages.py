@@ -6,6 +6,7 @@ Serves Jinja2 templates with htmx support.
 import logging
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -30,6 +31,8 @@ templates = Jinja2Templates(directory=str(templates_dir))
 
 from app.services.state_calculator import season_episodes  # noqa: E402
 templates.env.globals["season_episodes"] = season_episodes
+from app.services.episode_progress import episode_summary, episode_percent
+templates.env.globals.update(episode_summary=episode_summary, episode_percent=episode_percent)
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -107,6 +110,7 @@ async def index(
 async def history(
     request: Request,
     user_filter: Optional[str] = Query(None, alias="user"),
+    source_filter: Optional[str] = Query(None, alias="source"),
     state_filter: Optional[str] = Query(None, alias="state"),
     db: AsyncSession = Depends(get_db),
     auth_user: Optional[AuthenticatedUser] = Depends(get_current_user),
@@ -126,48 +130,46 @@ async def history(
         RequestState.TIMEOUT,
     ]
 
-    # Build base query with eager loading for episodes (used by card.html)
-    stmt = select(MediaRequest).options(selectinload(MediaRequest.episodes))
-
-    # Apply state filter if provided (otherwise show all terminal states)
-    if state_filter and state_filter in ['available', 'failed', 'timeout']:
-        stmt = stmt.where(MediaRequest.state == RequestState(state_filter))
-    else:
-        stmt = stmt.where(MediaRequest.state.in_(terminal_states))
-
-    # Apply user filter if provided
+    # Existing imports use this reserved system requester; retain stored data.
+    imported = MediaRequest.requested_by == "Library Sync"
+    requested = (MediaRequest.requested_by.is_(None) | (MediaRequest.requested_by != "Library Sync"))
+    if user_filter == "Library Sync":  # Preserve old bookmarked filters.
+        source_filter, user_filter = "library", None
+    if source_filter not in ("library", "requests"):
+        source_filter = None
+    if source_filter == "library":
+        user_filter = None
+    if state_filter not in ("available", "failed", "timeout"):
+        state_filter = None
+    conditions = [MediaRequest.state.in_(terminal_states)]
+    if source_filter:
+        conditions.append(imported if source_filter == "library" else requested)
     if user_filter:
-        stmt = stmt.where(MediaRequest.requested_by == user_filter)
+        conditions.append(MediaRequest.requested_by == user_filter)
 
-    stmt = stmt.order_by(MediaRequest.updated_at.desc()).limit(100)
-
-    result = await db.execute(stmt)
-    requests = result.scalars().all()
-
-    # Get list of unique users for filter dropdown
-    users_stmt = (
-        select(distinct(MediaRequest.requested_by))
-        .where(MediaRequest.requested_by.isnot(None))
-        .where(MediaRequest.state.in_(terminal_states))
-    )
-    users_result = await db.execute(users_stmt)
-    users = [u for u in users_result.scalars().all() if u]
-
-    # Get stats for summary cards
-    stats_stmt = (
-        select(MediaRequest.state, func.count())
-        .where(MediaRequest.state.in_(terminal_states))
-        .group_by(MediaRequest.state)
-    )
-    stats_result = await db.execute(stats_stmt)
+    stats_result = await db.execute(select(MediaRequest.state, func.count())
+        .where(*conditions).group_by(MediaRequest.state))
     stats = {row[0].value: row[1] for row in stats_result}
+    total = stats.get(state_filter, 0) if state_filter else sum(stats.values())
+    stmt = select(MediaRequest).options(selectinload(MediaRequest.episodes)).where(*conditions)
+    if state_filter:
+        stmt = stmt.where(MediaRequest.state == RequestState(state_filter))
+    requests = (await db.execute(stmt.order_by(MediaRequest.updated_at.desc(), MediaRequest.id.desc()).limit(100))).scalars().all()
+    users = (await db.execute(select(distinct(MediaRequest.requested_by))
+        .where(MediaRequest.state.in_(terminal_states), requested))).scalars().all()
+    filters = {k: v for k, v in {"user": user_filter, "source": source_filter}.items() if v}
+    tab_urls = {state: "/history" + ("?" + urlencode({**filters, **({"state": state} if state else {})})
+        if filters or state else "") for state in ("", "available", "failed", "timeout")}
 
     return templates.TemplateResponse(
         "history.html",
         {
             "request": request,
             "requests": requests,
-            "users": sorted(users),
+            "users": sorted(u for u in users if u),
+            "total": total,
+            "tab_urls": tab_urls,
+            "current_source_filter": source_filter,
             "current_user_filter": user_filter,
             "current_state_filter": state_filter,
             "stats": stats,

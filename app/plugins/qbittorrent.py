@@ -30,6 +30,8 @@ Adaptive Polling:
 - POLL_SLOW (15s): When no active downloads (idle)
 """
 
+from app.services.episode_progress import file_progress
+
 import logging
 from typing import TYPE_CHECKING, Optional
 
@@ -261,7 +263,10 @@ class QBittorrentPlugin(ServicePlugin):
                 if not torrent:
                     continue
 
+                observed = file_progress(episodes, await client.get_files(hash_key)) if episodes else {}
                 for episode in episodes:
+                    if episode.state in (EpisodeState.GRABBING, EpisodeState.DOWNLOADING):
+                        episode.download_progress = observed.get((episode.season_number, episode.episode_number))
                     # Track torrent for this request (for progress aggregation)
                     if episode.request_id not in request_torrents:
                         request_torrents[episode.request_id] = []
@@ -415,6 +420,8 @@ class QBittorrentPlugin(ServicePlugin):
         # During DOWNLOADING, torrent % is set by _update_tv_progress_from_torrents
         if new_state not in (RequestState.GRABBING, RequestState.DOWNLOADING):
             request.download_progress = downloaded_eps / total_eps
+            request.download_speed = None
+            request.download_eta = None
 
         # Only transition if state actually changed
         if new_state != request.state:

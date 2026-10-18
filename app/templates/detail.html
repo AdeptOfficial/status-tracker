@@ -16,6 +16,12 @@
     'timeout': 'Timeout'
 } %}
 
+{% set event_labels = {
+    ('library_sync', 'Metadata repair'): 'Metadata repaired',
+    ('radarr', 'Import'): 'Imported',
+    ('sonarr', 'Import'): 'Imported'
+} %}
+
 {% block content %}
 <div id="detail-content" style="display: grid; gap: 20px;">
     <!-- Back + prompt + connection status -->
@@ -69,7 +75,9 @@
 
                 {% if media_request.requested_by %}
                     <div class="kv rule">
-                        <span class="k">requested by:</span> {{ media_request.requested_by }}
+                        {% if media_request.requested_by == 'Library Sync' %}
+                        <span class="k">source:</span> Library import
+                        {% else %}<span class="k">requested by:</span> {{ media_request.requested_by }}{% endif %}
                     </div>
                 {% endif %}
 
@@ -139,6 +147,7 @@
             <!-- Episode Progress (TV shows only) -->
             {% if media_request.media_type.value == 'tv' and (media_request.episodes or media_request.total_episodes) %}
                 {% set eps = season_episodes(media_request) %}
+            {% set summary = episode_summary(media_request) %}
                 {% set grabbed_eps = eps|length %}
                 {% set available_eps = eps|selectattr('state.value', 'equalto', 'available')|list|length %}
                 {% set downloading_eps = eps|selectattr('state.value', 'equalto', 'downloading')|list|length %}
@@ -164,17 +173,18 @@
                             <span class="stext st-requested when" style="animation: pulse-slow 2s ease-in-out infinite;">Searching for {{ total_eps }} episodes</span>
                         {% elif media_request.state.value == 'grabbing' or (media_request.state.value == 'approved' and grabbed_eps > 0) %}
                             {% if grabbed_eps == total_eps %}
-                                <span class="stext st-grabbing when">Season pack grabbed</span>
+                                <span class="stext st-grabbing when">All {{ total_eps }} episodes grabbed</span>
                             {% else %}
                                 <span class="stext st-grabbing when">Grabbed {{ grabbed_eps }}/{{ total_eps }} eps</span>
                             {% endif %}
                         {% elif media_request.state.value == 'downloading' %}
-                            <span class="stext st-downloading when">Downloading {{ grabbed_eps }}/{{ total_eps }} eps</span>
+                            <span class="stext st-downloading when">Downloading {{ downloading_eps }}/{{ total_eps }} eps</span>
                         {% else %}
                             <span class="when">{{ available_eps }}/{{ total_eps }} ready</span>
                         {% endif %}
                     </div>
 
+                <p class="when episode-summary" data-episode-summary>{{ summary.downloaded }}/{{ summary.total }} downloaded · {{ summary.ready }}/{{ summary.total }} ready</p>
                     <!-- Episode progress bar -->
                     <div class="bar thick" style="margin-bottom: 16px;">
                         {% if available_eps > 0 and total_eps > 0 %}
@@ -203,6 +213,7 @@
                     <!-- Episode list -->
                     <div style="display: grid; gap: 6px; max-height: 260px; overflow-y: auto;">
                         {% for ep in eps %}
+                            <div class="episode-row" data-episode="{{ ep.season_number }}-{{ ep.episode_number }}">
                             <div class="statline" style="margin-bottom: 0;">
                                 <span style="display: flex; gap: 10px; min-width: 0; align-items: baseline;">
                                     <span class="sub" style="flex-shrink: 0;">S{{ "%02d"|format(ep.season_number) }}E{{ "%02d"|format(ep.episode_number) }}</span>
@@ -211,8 +222,14 @@
                                     {% endif %}
                                 </span>
                                 <span class="chip st-{{ ep.state.value }}" style="flex-shrink: 0;">
-                                    {{ ep_state_labels.get(ep.state.value, ep.state.value) }}
+                                    {{ ep_state_labels.get(ep.state.value, ep.state.value) }}{% if ep.state.value == 'downloading' %}{% set percent = episode_percent(ep) %} · {{ (percent|string + '%') if percent is not none else 'progress unknown' }}{% endif %}
                                 </span>
+                            </div>
+                            {% if ep.state.value == 'downloading' and episode_percent(ep) is not none %}
+                            <div class="bar thin" role="progressbar" aria-label="S{{ '%02d'|format(ep.season_number) }}E{{ '%02d'|format(ep.episode_number) }} download" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ episode_percent(ep) }}">
+                                <div class="seg st-downloading" style="width: {{ episode_percent(ep) }}%"></div>
+                            </div>
+                            {% endif %}
                             </div>
                         {% endfor %}
                         {# Show pending episodes (not yet grabbed) #}
@@ -235,7 +252,7 @@
                         <div class="tl-event st-{{ event.state.value }}">
                             <div class="tl-dot"></div>
                             <div class="tl-head">
-                                <b>{{ state_labels.get(event.state.value, event.state.value) }}</b>
+                                <b>{{ event_labels.get((event.service, event.event_type), state_labels.get(event.state.value, event.state.value)) }}</b>
                                 <time class="when local-time"
                                       data-utc="{{ event.timestamp.isoformat() }}Z"
                                       data-format="time">

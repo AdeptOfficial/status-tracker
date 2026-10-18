@@ -7,6 +7,7 @@ https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)
 """
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -95,6 +96,15 @@ class QBittorrentClient:
         try:
             client = await self._get_client()
 
+            # A reused cookie or server-configured trusted subnet may already
+            # authorize this client. Avoid unnecessary failed password attempts.
+            probe = await client.get("/api/v2/app/version")
+            if probe.status_code == 200 and re.fullmatch(
+                r"v?\d+\.\d+\.\d+(?:[A-Za-z0-9.+-]*)?", probe.text.strip()
+            ):
+                self._authenticated = True
+                return True
+
             response = await client.post(
                 "/api/v2/auth/login",
                 data={
@@ -109,7 +119,7 @@ class QBittorrentClient:
                 return True
 
             logger.warning(
-                f"qBittorrent login failed: {response.status_code} - {response.text}"
+                f"qBittorrent login failed: HTTP {response.status_code}"
             )
             return False
 
@@ -156,6 +166,20 @@ class QBittorrentClient:
             return []
         except Exception as e:
             logger.error(f"Unexpected error parsing torrents: {e}")
+            return []
+
+    async def get_files(self, torrent_hash: str) -> list[dict]:
+        """Read per-file progress; failure means unknown, not zero or complete."""
+        if not self._authenticated and not await self.login():
+            return []
+        try:
+            client = await self._get_client()
+            response = await client.get('/api/v2/torrents/files', params={'hash': torrent_hash})
+            response.raise_for_status()
+            rows = response.json()
+            return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+        except (httpx.HTTPError, ValueError):
+            logger.warning('Could not read torrent file progress')
             return []
 
     def _parse_torrent(self, data: dict) -> TorrentInfo:

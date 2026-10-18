@@ -90,6 +90,7 @@
         <!-- Episode progress for TV shows -->
         {% if request.media_type.value == 'tv' and (request.episodes or request.total_episodes) %}
             {% set eps = season_episodes(request) %}
+            {% set summary = episode_summary(request) %}
             {% set grabbed_eps = eps|length %}
             {% set available_eps = eps|selectattr('state.value', 'equalto', 'available')|list|length %}
             {% set downloading_eps = eps|selectattr('state.value', 'equalto', 'downloading')|list|length %}
@@ -103,16 +104,17 @@
                         <span class="stext st-requested chip-busy" style="animation: pulse-slow 2s ease-in-out infinite;">Searching for {{ total_eps }}</span>
                     {% elif request.state.value == 'grabbing' or (request.state.value == 'approved' and grabbed_eps > 0) %}
                         {% if grabbed_eps == total_eps %}
-                            <span class="stext st-grabbing">Season pack grabbed</span>
+                            <span class="stext st-grabbing">All {{ total_eps }} episodes grabbed</span>
                         {% else %}
                             <span class="stext st-grabbing">Grabbed {{ grabbed_eps }}/{{ total_eps }}</span>
                         {% endif %}
                     {% elif request.state.value == 'downloading' %}
-                        <span class="stext st-downloading">Downloading {{ grabbed_eps }}/{{ total_eps }}</span>
+                        <span class="stext st-downloading">Downloading {{ downloading_eps }}/{{ total_eps }}</span>
                     {% else %}
                         <span class="stext st-available">{{ available_eps }}/{{ total_eps }} ready</span>
                     {% endif %}
                 </div>
+                <p class="when episode-summary" data-episode-summary>{{ summary.downloaded }}/{{ summary.total }} downloaded · {{ summary.ready }}/{{ summary.total }} ready</p>
                 <!-- Episode progress bar -->
                 <div class="bar thin">
                     {% if available_eps > 0 and total_eps > 0 %}
@@ -145,7 +147,7 @@
                                     S{{ "%02d"|format(ep.season_number) }}E{{ "%02d"|format(ep.episode_number) }}
                                     {% if ep.episode_title %}<span class="sub"> {{ ep.episode_title|truncate(20) }}</span>{% endif %}
                                 </span>
-                                <span class="stext st-{{ ep.state.value }}">{{ ep_state_icons.get(ep.state.value, '?') }}</span>
+                                <span class="stext st-{{ ep.state.value }}">{{ ep_state_icons.get(ep.state.value, '?') }}{% if ep.state.value == 'downloading' %}{% set percent = episode_percent(ep) %} {{ (percent|string + '%') if percent is not none else 'progress unknown' }}{% endif %}</span>
                             </div>
                         {% endfor %}
                         {# Show pending episodes count (not yet grabbed) #}

@@ -114,3 +114,21 @@ async def subscribe(self) -> AsyncGenerator[str, None]:
 
 - `issues/detail-page-live-updates-bug.md` - General live update issue
 - Plan file: `/home/adept/.claude/plans/mossy-waddling-sketch.md` - Debug approach
+
+## 2026-10-17 readiness review
+
+Read-only check against dev `http://10.0.2.20:8100`: health and SSE both HTTP 200.
+A single SSE connection remained open for 45 seconds, emitted its connected event
+and five comment heartbeats, then was intentionally closed by the checker. The
+reported 1–2 second disconnect was not reproduced during this direct HTTP check.
+No live data was modified. Browser reconnection, proxy paths and detail-page
+refresh behavior remain separate acceptance checks; this does not close those.
+
+Current source suite: 91 passed in an isolated Python 3.12 test container with
+networking disabled. There were 796 warnings, including deprecations and async
+cleanup/unawaited-coroutine warnings; passing tests do not resolve those warnings.
+
+The isolated Firefox detail-page acceptance also passed forced server disconnect,
+reconnection and a subsequent progress update without reloading the document.
+See [detail-page evidence](detail-page-live-updates-bug.md). This supplements the
+45-second direct-dev stream check; no proxy-path or real-download claim is made.

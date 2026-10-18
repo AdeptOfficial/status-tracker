@@ -40,7 +40,7 @@ nav a.active.danger { color: var(--crimson); }
 .navbtn:hover { color: var(--ink); }
 
 main { max-width: 1240px; width: 100%; margin: 0 auto; padding: 24px 16px 60px;
-  display: grid; gap: 20px; align-content: start; flex: 1; }
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; flex: 1; }
 .motd { margin: 0; color: var(--faint); font-size: 12px; letter-spacing: .08em;
   display: flex; align-items: center; gap: 10px; }
 .motd .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -102,7 +102,7 @@ h2 { font-size: 12px; letter-spacing: .25em; text-transform: uppercase; color: v
 .badge.admin { color: var(--signal); border-color: color-mix(in srgb, var(--signal) 45%, var(--line)); }
 
 /* request cards */
-.cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+.cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); }
 .reqcard {
   display: flex; border: 1px solid var(--line); background: var(--card);
   color: inherit; text-decoration: none; transition: border-color .15s; overflow: hidden;
@@ -142,9 +142,16 @@ details summary { cursor: pointer; color: var(--faint); font-size: 11px;
 details summary:hover { color: var(--muted); }
 details summary::marker { color: var(--signal); }
 
-/* detail page */
-.detailgrid { display: grid; gap: 20px; grid-template-columns: 300px 1fr; align-items: start; }
-@media (max-width: 860px) { .detailgrid { grid-template-columns: 1fr; } }
+/* Detail grids must shrink below the min-content width of posters/metadata. */
+#detail-content { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+#detail-content .motd { flex-wrap: wrap; }
+#detail-content .motd > span { min-width: 0; overflow-wrap: anywhere; }
+.detailgrid > * { min-width: 0; }
+.detailgrid > div { grid-template-columns: minmax(0, 1fr); }
+.detailgrid .info, .detailgrid .card { min-width: 0; overflow-wrap: anywhere; }
+.detailgrid .card-head { flex-wrap: wrap; }
+.detailgrid { display: grid; gap: 20px; grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
+@media (max-width: 860px) { .detailgrid { grid-template-columns: minmax(0, 1fr); } }
 .postercard { border: 1px solid var(--line); background: var(--card); overflow: hidden; }
 .postercard img { width: 100%; object-fit: cover; aspect-ratio: 2/3; display: block; }
 .postercard .noart { width: 100%; aspect-ratio: 2/3; display: flex; align-items: center;
@@ -295,3 +302,10 @@ footer {
 form.htmx-request .btn, .btn.htmx-request { opacity: .55; pointer-events: none; }
 form.htmx-request .btn::after, .btn.htmx-request::after {
   content: " ▋"; color: var(--signal); animation: blink .7s steps(1) infinite; }
+
+/* Episode progress stays readable on narrow screens. */
+.episode-summary { line-height: 1.6; }
+.episode-row { min-width: 0; }
+.episode-row .statline { flex-wrap: wrap; gap: 6px; }
+.episode-row .statline > span:first-child { flex: 1 1 160px; }
+.episode-row .bar { margin: 6px 0; }

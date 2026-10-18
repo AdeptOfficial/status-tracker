@@ -14,6 +14,8 @@ docs/
     └── features/       # Feature planning docs
 ```
 
+See [Testing](TESTING.md) for the regression suite, browser tests and dev review.
+
 ## Quick Links
 
 | Document | Description |

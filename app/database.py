@@ -75,6 +75,7 @@ async def run_migrations(conn):
     # Add new columns here when the model changes
     # NOTE: SQLAlchemy Enum stores the enum NAME (uppercase), not the value
     migrations = {
+        "episodes": {"download_progress": ("FLOAT", "NULL")},
         "deletion_logs": {
             "status": ("VARCHAR(20)", "'IN_PROGRESS'"),
             "is_anime": ("BOOLEAN", "0"),  # For Shoko sync determination

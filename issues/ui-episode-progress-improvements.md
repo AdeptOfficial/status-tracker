@@ -153,3 +153,13 @@ S01E04  Passing Shower           ░░░░░░░░░░░░   0%
 - [ ] Grabbing state shows "Grabbing 3/12 episodes" for per-episode releases
 - [ ] Timeline Downloading event shows file size
 - [ ] Per-episode progress % for season packs (via qBit file API)
+
+## October 17 implementation update
+
+Downloaded/ready counts now appear on cards and detail at every phase. Downloading
+rows show measured percentages (including unambiguously matched season-pack
+files) or unknown; detail rows include accessible progress bars. The downloading
+label counts downloading rows. Grab text no longer assumes every complete set
+of rows came from one season-pack torrent. Existing lifecycle labels are retained.
+See [testing](../docs/TESTING.md). Deployed DEV only; unrelated January requests
+such as SEARCHING and timeline file-size changes are not implicitly completed.

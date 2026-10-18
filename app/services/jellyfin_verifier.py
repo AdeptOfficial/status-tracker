@@ -583,51 +583,11 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
                     f"[FALLBACK] Verified: {request.title} ({previous_state} → AVAILABLE)"
                 )
             else:
-                # Not in Jellyfin yet - apply state-specific transitions
-                if request.state == RequestState.DOWNLOADED:
-                    # DOWNLOADED → IMPORTING/ANIME_MATCHING: Sonarr Import webhook may have been missed
-                    target_state = RequestState.ANIME_MATCHING if request.is_anime else RequestState.IMPORTING
-                    await state_machine.transition(
-                        request,
-                        target_state,
-                        db,
-                        service="fallback",
-                        event_type="Stuck Recovery",
-                        details="Download complete, assuming import in progress...",
-                        raw_data={
-                            "fallback_reason": "DOWNLOADED stuck, transitioning to continue flow",
-                        },
-                    )
-                    transitioned.append(request)  # Mark for commit
-                    # Broadcast moved to after commit
-                    logger.info(
-                        f"[FALLBACK] '{request.title}' stuck at DOWNLOADED, "
-                        f"transitioned to {target_state.value}"
-                    )
-                elif request.is_anime and request.state == RequestState.IMPORTING:
-                    # IMPORTING → ANIME_MATCHING: Show progress for anime
-                    await state_machine.transition(
-                        request,
-                        RequestState.ANIME_MATCHING,
-                        db,
-                        service="jellyfin",
-                        event_type="Detected",
-                        details="Detected in library scan, waiting for Shokofin sync...",
-                        raw_data={
-                            "tmdb_id": request.tmdb_id,
-                            "fallback_reason": "IMPORTING anime detected, awaiting Jellyfin sync",
-                        },
-                    )
-                    transitioned.append(request)  # Mark for commit
-                    # Broadcast moved to after commit
-                    logger.info(
-                        f"[FALLBACK] '{request.title}' not yet in Jellyfin, "
-                        f"transitioned IMPORTING → ANIME_MATCHING"
-                    )
-                else:
-                    logger.debug(
-                        f"[FALLBACK] '{request.title}' not yet in Jellyfin"
-                    )
+                # A timeout is not evidence of import or Shoko matching.
+                # Keep the observed stage; future verification still recovers
+                # missed webhooks by confirming actual Jellyfin availability.
+                logger.debug("[FALLBACK] Request %s not verified; retaining %s",
+                             request.id, request.state.value)
 
         except Exception as e:
             logger.error(

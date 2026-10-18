@@ -285,3 +285,9 @@ docker compose up -d --force-recreate
 1. Check `issues/` folder for known issues
 2. Read `DIARY.md` for recent changes and fixes
 3. Check `docs/` for technical deep-dives
+
+## Automated tests
+
+Run `./run_tests.sh -q` for isolated regressions. Real Firefox checks use
+`npm --prefix tests/browser ci --ignore-scripts` then `./run_browser_tests.sh`.
+See [testing and dev review](docs/TESTING.md) for prerequisites, scope and limits.

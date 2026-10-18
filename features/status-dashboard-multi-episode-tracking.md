@@ -3,7 +3,7 @@
 **Created:** 2026-01-18
 **Component:** status-tracker (apps/status-tracker/)
 **Priority:** Medium
-**Status:** Open
+**Status:** Partially implemented on DEV (2026-10-17); see approved scope below
 
 ## Problem
 
@@ -99,3 +99,25 @@ Charlotte (2015) - COMPLETE
 
 - `ideas/features/request-status-dashboard.md` - Original feature spec
 - `apps/status-tracker/` - Current implementation
+
+## Approved October 17 implementation scope
+
+Keep FastAPI/SQLite/Jinja/HTMX/SSE. Show season-scoped downloaded and ready counts
+on cards and detail; ready remains based only on AVAILABLE. Store nullable episode
+progress and obtain it from qBittorrent file data, once per active hash per poll.
+Only unambiguous video filenames with SxxExx markers are matched; a single video
+and single distinct tracked episode can use that file's progress. Ambiguous,
+unsupported, skipped or missing files remain unknown. No torrent-wide percentage
+is copied to season-pack episodes. Existing state transitions are unchanged.
+Additive SQLite migration preserves existing data; re-grabs clear old progress.
+Tests must cover mapping, invalid data, migration, mixed seasons/states, rendering,
+API persistence and repeatable browser updates/reconnection with synthetic data.
+No new SEARCHING state, deletion behavior, or media download is in this iteration.
+
+### Verification and remaining scope
+
+Approved October 17 scope implemented and deployed to DEV. 111 regressions and
+permanent Firefox acceptance pass; see `docs/TESTING.md`. Real pipeline observation
+awaits an active dev request. Multi-season grouped UI, deletion verification,
+absolute-numbered anime pack matching, and a new SEARCHING state remain outside
+this iteration. Production unchanged.

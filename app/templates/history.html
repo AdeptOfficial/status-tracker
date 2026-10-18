@@ -6,12 +6,18 @@
 <p class="motd">adept@lab:~$ cat requests.log<span class="cursor">▋</span></p>
 
 <!-- Header: filters + sync -->
-<div class="card-head" style="margin-bottom: 0;">
-    <span class="when">{{ requests|length }} completed request{% if requests|length != 1 %}s{% endif %}</span>
+<div class="card-head" style="margin-bottom: 0; flex-wrap: wrap;">
+    <span class="when">{{ total }} history item{% if total != 1 %}s{% endif %}{% if total > requests|length %} · showing latest {{ requests|length }}{% endif %}</span>
     <div class="filterbar">
+        <label for="source-filter">source:</label>
+        <select id="source-filter" onchange="applyFilters()">
+            <option value="">All sources</option>
+            <option value="requests" {% if current_source_filter == 'requests' %}selected{% endif %}>Requests</option>
+            <option value="library" {% if current_source_filter == 'library' %}selected{% endif %}>Library imports</option>
+        </select>
         {% if users %}
-        <label for="user-filter">filter by user:</label>
-        <select id="user-filter" onchange="applyFilters()">
+        <label for="user-filter">user:</label>
+        <select id="user-filter" onchange="applyFilters()" {% if current_source_filter == 'library' %}disabled{% endif %}>
             <option value="">All users</option>
             {% for user in users %}
                 <option value="{{ user }}" {% if current_user_filter == user %}selected{% endif %}>{{ user }}</option>
@@ -31,12 +37,12 @@
 
 <!-- State filter tabs -->
 <div class="tabs">
-    <a href="/history" class="tab {% if not current_state_filter %}active{% endif %}">All</a>
-    <a href="/history?state=available" class="tab st-available {% if current_state_filter == 'available' %}active{% endif %}">
+    <a href="{{ tab_urls[''] }}" class="tab {% if not current_state_filter %}active{% endif %}">All</a>
+    <a href="{{ tab_urls['available'] }}" class="tab st-available {% if current_state_filter == 'available' %}active{% endif %}">
         Ready ({{ stats.available or 0 }})</a>
-    <a href="/history?state=failed" class="tab st-failed {% if current_state_filter == 'failed' %}active{% endif %}">
+    <a href="{{ tab_urls['failed'] }}" class="tab st-failed {% if current_state_filter == 'failed' %}active{% endif %}">
         Failed ({{ stats.failed or 0 }})</a>
-    <a href="/history?state=timeout" class="tab st-timeout {% if current_state_filter == 'timeout' %}active{% endif %}">
+    <a href="{{ tab_urls['timeout'] }}" class="tab st-timeout {% if current_state_filter == 'timeout' %}active{% endif %}">
         Timeout ({{ stats.timeout or 0 }})</a>
 </div>
 
@@ -81,8 +87,10 @@
         {% endfor %}
     {% else %}
         <div class="empty" style="grid-column: 1 / -1;">
-            <b>No history yet</b>
-            Completed requests will appear here.
+            {% if current_user_filter or current_source_filter or current_state_filter %}
+            <b>No matching history</b>
+            Try another filter or <a href="/history">clear filters</a>.
+            {% else %}<b>No history yet</b>Completed requests and library imports will appear here.{% endif %}
         </div>
     {% endif %}
 </div>
@@ -98,10 +106,10 @@
                 <h3>// sync library</h3>
                 <p style="color: var(--muted); font-size: 13px;">
                     Import existing media from Jellyfin to the status dashboard.
-                    This will create entries for all available content not yet tracked.
+                    This adds untracked content and fills missing IDs, posters and years on matching requests. Existing values and request status are preserved.
                 </p>
                 <div class="inset note">
-                    Jellyfin library will be rescanned first to ensure fresh data.
+                    A Jellyfin rescan is requested first. Sync uses the currently indexed library; if the scan is still running, sync again after it finishes.
                 </div>
                 <div class="modal-actions">
                     <button onclick="hideSyncModal()" class="btn">Cancel</button>
@@ -120,12 +128,12 @@
 
             <!-- Results state -->
             <div id="sync-results" class="hidden">
-                <h3>// sync complete</h3>
+                <h3 id="sync-result-heading">// sync complete</h3>
                 <div style="margin-bottom: 18px;">
                     <div class="statline"><span class="sub">Total Scanned</span><b id="sync-total">0</b></div>
                     <div class="statline st-available"><span class="sub">Added</span><b id="sync-added">0</b></div>
-                    <div class="statline st-approved"><span class="sub">Updated (filled missing IDs)</span><b id="sync-updated">0</b></div>
-                    <div class="statline"><span class="sub">Skipped (already tracked)</span><b id="sync-skipped">0</b></div>
+                    <div class="statline st-approved"><span class="sub">Updated (filled missing metadata)</span><b id="sync-updated">0</b></div>
+                    <div class="statline"><span class="sub">Already tracked</span><b id="sync-skipped">0</b></div>
                     <div id="sync-errors-row" class="statline st-failed hidden"><span class="sub">Errors</span><b id="sync-errors">0</b></div>
                 </div>
                 <div class="modal-actions">
@@ -204,7 +212,9 @@
         const userFilter = document.getElementById('user-filter')?.value || '';
         const params = new URLSearchParams(window.location.search);
 
-        if (userFilter) {
+        const source = document.getElementById('source-filter').value;
+        if (source) params.set('source', source); else params.delete('source');
+        if (userFilter && source !== 'library') {
             params.set('user', userFilter);
         } else {
             params.delete('user');
@@ -357,10 +367,14 @@
     }
 
     function hideSyncModal() {
+        if (syncInProgress) return;
         document.getElementById('sync-modal').classList.add('hidden');
     }
 
+    let syncInProgress = false;
     async function startSync() {
+        if (syncInProgress) return;
+        syncInProgress = true;
         // Show loading state
         document.getElementById('sync-initial').classList.add('hidden');
         document.getElementById('sync-loading').classList.remove('hidden');
@@ -379,6 +393,7 @@
             if (response.ok) {
                 const result = await response.json();
 
+                document.getElementById('sync-result-heading').textContent = result.errors > 0 ? '// sync finished with errors' : '// sync complete';
                 // Update results
                 document.getElementById('sync-total').textContent = result.total_scanned;
                 document.getElementById('sync-added').textContent = result.added;
@@ -407,6 +422,8 @@
         } catch (err) {
             console.error('Sync error:', err);
             showSyncError(`Connection error: ${err.message}`);
+        } finally {
+            syncInProgress = false;
         }
     }
 
