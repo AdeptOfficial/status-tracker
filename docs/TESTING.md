@@ -29,6 +29,12 @@ existing 91 tests. The deployment image passed the same suite on DEV LXC 220 via
 Existing deprecation/async-cleanup warnings remain: 869 warnings on this run.
 They are not treated as errors; passing tests are not a claim those warnings are fixed.
 
+## Local-time regression (October 18)
+
+Firefox runs with TZ=America/Chicago and checks browser-local timeline text on
+initial load, live HTMX replacement and after reconnect. Full browser suite passed.
+The DEV fix runs timestamp conversion after htmx:afterSwap as well as initial load.
+
 ## Real browser suite
 
 Requires Docker, Python 3, Node (tested with 25), Firefox, and curl. Node is only

@@ -6,6 +6,33 @@ Development log for the status-tracker project. New entries at the top.
 
 ---
 
+## 2026-10-18: Nightly handoff and successful playback
+
+- User confirmed request20 playback works and requested a future-agent handoff.
+- Updated the existing anime-matching/no-scan issue with current evidence,
+  unresolved cause, proposed coalesced refresh/retries, UX and acceptance tests.
+  AGENTS and roadmap point to it as the next DEV task.
+- Documentation only at wrap-up; no additional runtime changes, production release
+  or content approval. Automatic handoff still requires unattended verification.
+
+## 2026-10-18: DEV season reaches Available after Jellyfin refresh
+
+- Shoko had already matched all12 files to the correct series; queue was empty.
+  Jellyfin lacked the series and scan was idle. Manual DEV library refresh added
+  all12 episodes; scan finished and tracker recovered Available automatically.
+- No media/VFS deletion. Automatic refresh handoff still needs investigation;
+  user playback pending. See the DEV import-permissions issue for evidence.
+
+## 2026-10-18: Keep browser-local timeline times after live refresh
+
+- UTC-to-browser-local conversion previously ran only on DOMContentLoaded. HTMX
+  live swaps restored the server's UTC fallback text. Conversion now also runs on
+  htmx:afterSwap; storage remains UTC and presentation follows the browser timezone.
+- Permanent Firefox suite now runs in America/Chicago and asserts local times on
+  initial load, live update and reconnect. Full browser suite passed.
+- DEV image `status-tracker:local-time-20261018`; rollback
+  `status-tracker:before-local-time-20261018`. Production unchanged.
+
 ## 2026-10-17: Repair blocked DEV import and stop speculative progress
 
 - Request 20 finished downloading but Sonarr could not create its show folder:

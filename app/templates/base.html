@@ -79,6 +79,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', convertTimestampsToLocal);
+        document.addEventListener('htmx:afterSwap', convertTimestampsToLocal);
     </script>
 
     {% block scripts %}{% endblock %}

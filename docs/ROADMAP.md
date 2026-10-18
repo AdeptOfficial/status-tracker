@@ -6,12 +6,20 @@ Single source of truth for priorities, backlog, and deferred items.
 
 ---
 
+## Next task — automatic anime library refresh
+
+See the [October18 handoff](../issues/2026-01-22-anime-matching-no-scan.md).
+Investigate the current trigger before implementing coalesced refresh, bounded
+retries and explicit waiting feedback. Require unattended DEV recovery tests;
+manual scan recovery and successful playback do not establish automation reliability.
+User requested documentation only at tonight's wrap-up. Production remains on hold.
+
 ## Current iteration — episode progress and library repair
 
 Downloaded/ready summaries, conservative per-file percentages and permanent tests
 are implemented and dev-deployed. [Testing](TESTING.md) records 152 passing
 regressions, browser acceptance and review instructions. Desktop visual review approved; real-content mobile overflow is fixed and verified
-at five viewport widths on dev. Real request 20 has downloaded/imported all 12 episodes; Shoko/Jellyfin and playback validation remain. Production is explicitly on hold.
+at five viewport widths on dev. Real request 20 has downloaded/imported all 12 episodes; matching completed, a manual Jellyfin scan recovered availability, and user playback passed. Automatic refresh remains unverified. Production is explicitly on hold.
 The historical priorities below predate this iteration; do not reimplement these
 completed pieces from unchecked January boxes.
 

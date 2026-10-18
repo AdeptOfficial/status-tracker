@@ -9,16 +9,17 @@ permanent browser suite; never use real media downloads/deletions as fixtures.
 
 October 17 episode progress is deployed to DEV only. User explicitly said to stay
 in dev and not push to production. Git commits/pushes do not authorize deployment.
-Real pipeline validation is active: DEV request 20, 12 episodes. User chose to
-leave a read-only watcher running and resume checks on return. Local user service
-`status-tracker-dev-request20.service` polls every 30s for up to 24h, stops on
-available/failed/timeout. Verify service and log freshness before relying on it.
-Observations: `/tmp/status-tracker-20-observation.jsonl`; script and PID files:
-`/tmp/watch-status-tracker-20.py`, `/tmp/status-tracker-20-watcher.pid`.
-Request 20 download and Sonarr import are complete (12/12 hardlinked); force-start
-has been removed. Shoko processing observed. Pending: matching/Jellyfin readiness
-and user playback. Import repair and 152-test DEV release are recorded in
-`issues/2026-10-17-dev-import-permissions.md`. Do not rerun its data correction.
+DEV request 20 completed download/import/matching and reached Available after a
+manual Jellyfin library refresh. User confirmed playback works on October18.
+Next task: investigate and repair the automatic Shoko-to-Jellyfin refresh handoff.
+Read `issues/2026-01-22-anime-matching-no-scan.md` October18 handoff first; it records
+verified evidence, proposed implementation, tests and limitations. January code
+snippets are historical, not a confirmed current root cause.
+Request20 used 12 hardlinked files; force-start removed. Do not rerun its data
+correction. Import repair: `issues/2026-10-17-dev-import-permissions.md`.
+The read-only watcher `status-tracker-dev-request20.service` stops on Available;
+it is no longer required. Its /tmp observation files are not durable evidence.
+User wrapped up for the night; no further runtime changes made for this handoff.
 Other old DEV downloads resumed after shared-directory permissions were repaired;
 origin investigation is recorded in the issue below. User has asked where they
 came from, not yet instructed pausing/unmonitoring them. Do not claim they stayed

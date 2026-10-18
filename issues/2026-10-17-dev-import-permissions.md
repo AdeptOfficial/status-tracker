@@ -37,3 +37,17 @@ Source sync excluded server secrets and Compose. API keys stayed inside clients.
 Follow-up: observe Shoko matching and actual Jellyfin episode readiness, then user
 playback. Read-only watcher and paths are in AGENTS.md. Do not repeat force-start
 cleanup or rerun the one-time state correction. No production authorization.
+
+## October 18 follow-up: matching finished, Jellyfin scan missing
+
+Verified all 12 Shoko file-to-episode associations reference TMDB show120155;
+queue empty. Jellyfin had no series entry and its library scan was idle. A DEV
+Jellyfin library refresh (no VFS/media deletion) created the series and all12
+episodes; scan returned Idle and tracker automatically became Available with a
+Jellyfin link. This recovers the request, but does not prove the automatic
+Shoko-to-Jellyfin refresh handoff is reliable. Investigate that separately before
+claiming unattended end-to-end acceptance. User playback still pending.
+
+October18 wrap-up: user confirmed playback works. Next-agent investigation and
+acceptance criteria are in `2026-01-22-anime-matching-no-scan.md`; automatic refresh
+remains unresolved. No additional runtime changes at wrap-up.
