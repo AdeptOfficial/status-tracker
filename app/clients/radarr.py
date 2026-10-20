@@ -1,6 +1,7 @@
 """Radarr API v3 client for deletion operations."""
 
 import logging
+from pathlib import PurePosixPath
 from typing import Optional
 
 import httpx
@@ -44,50 +45,89 @@ class RadarrClient:
             await self._client.aclose()
             self._client = None
 
-    async def delete_movie(self, movie_id: int, delete_files: bool = True) -> tuple[bool, str]:
-        """
-        Delete a movie from Radarr.
+    async def get_movie_strict(self, movie_id: int) -> Optional[dict]:
+        """Only a real 404 means absent; transport/auth/server errors must propagate."""
+        client = await self._get_client()
+        response = await client.get(f"/api/v3/movie/{movie_id}")
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        movie = response.json()
+        if not isinstance(movie, dict) or movie.get("id") != movie_id:
+            raise ValueError("Invalid Radarr movie response")
+        return movie
 
-        Args:
-            movie_id: Radarr movie ID
-            delete_files: If True, delete files from disk
+    async def folder_video_files(self, movie_path: str) -> list[str]:
+        """Read actual disk inventory, independent of Radarr's movie-file database."""
+        path = PurePosixPath(movie_path)
+        if not path.is_absolute() or ".." in path.parts or len(path.parts) < 3:
+            raise ValueError("Cannot verify an ambiguous movie directory")
+        client = await self._get_client()
+        response = await client.get("/api/v3/filesystem", params={
+            "path": str(path) + "/", "includeFiles": "true",
+            "allowFoldersWithoutTrailingSlashes": "true",
+        })
+        response.raise_for_status()
+        listing = response.json()
+        if not isinstance(listing, dict) or not isinstance(listing.get("files"), list) or not isinstance(listing.get("directories"), list):
+            raise ValueError("Invalid Radarr filesystem response")
+        # Refuse nested directories: they may contain unverified media.
+        if listing["directories"]:
+            raise ValueError("Movie folder has subdirectories; manual verification required")
+        extensions = {".mkv", ".mp4", ".avi", ".m4v", ".ts", ".m2ts", ".mpg",
+                      ".mpeg", ".wmv", ".webm", ".mov", ".vob", ".iso", ".strm"}
+        files = []
+        for item in listing["files"]:
+            name = item.get("path")
+            if not isinstance(name, str) or PurePosixPath(name).parent != path:
+                raise ValueError("Invalid file path in Radarr filesystem response")
+            if PurePosixPath(name).suffix.lower() in extensions:
+                files.append(name)
+        return files
 
-        Returns:
-            Tuple of (success, message)
+    async def delete_movie(self, movie_id: int, delete_files: bool = True,
+                           movie_path: Optional[str] = None,
+                           tmdb_id: Optional[int] = None) -> tuple[bool, str]:
+        """Remove files before the movie record; verify disk evidence before success.
+
+        movie_path is persisted by the caller before any mutation, allowing a retry
+        to verify files even if an earlier attempt removed the service record.
         """
         try:
             client = await self._get_client()
-            response = await client.delete(
-                f"/api/v3/movie/{movie_id}",
-                params={"deleteFiles": str(delete_files).lower()}
-            )
-
-            if response.status_code == 200:
-                logger.info(f"Successfully deleted Radarr movie {movie_id} (deleteFiles={delete_files})")
-                return True, "Movie deleted successfully"
-            elif response.status_code == 404:
-                logger.info(f"Radarr movie {movie_id} not found (already deleted?)")
-                return True, "Movie not found (already deleted)"
-            else:
-                error_msg = f"Delete failed with status {response.status_code}"
-                try:
-                    error_data = response.json()
-                    if "message" in error_data:
-                        error_msg = error_data["message"]
-                except Exception as json_err:
-                    # Log response body for debugging if JSON parse fails
-                    logger.warning(f"Could not parse Radarr error response: {response.text[:200]}")
-                logger.error(f"Failed to delete Radarr movie {movie_id}: {error_msg}")
-                return False, error_msg
-
-        except httpx.RequestError as e:
-            error_msg = f"Request error: {e}"
-            logger.error(f"Request error deleting Radarr movie: {e}")
-            return False, error_msg
-        except Exception as e:
-            error_msg = f"Unexpected error: {e}"
-            logger.error(f"Unexpected error deleting Radarr movie: {e}")
-            return False, error_msg
+            movie = await self.get_movie_strict(movie_id)
+            if movie:
+                if tmdb_id is not None and movie.get("tmdbId") != tmdb_id:
+                    return False, "Radarr movie identity changed; nothing deleted"
+                if movie_path and movie.get("path") != movie_path:
+                    return False, "Radarr movie directory changed; nothing deleted"
+                movie_path = movie.get("path")
+            if delete_files:
+                if not movie_path:
+                    return False, "No persisted movie directory; cannot prove file removal"
+                # A stale/404 service record is not proof of file removal.
+                files = await self.folder_video_files(movie_path)
+                if files:
+                    file_id = (movie or {}).get("movieFile", {}).get("id")
+                    if not file_id:
+                        return False, "Video files remain without a Radarr file record; re-import before retry"
+                    result = await client.delete(f"/api/v3/moviefile/{file_id}")
+                    if result.status_code not in (200, 204, 404):
+                        return False, f"Radarr file deletion failed (HTTP {result.status_code})"
+                    if await self.folder_video_files(movie_path):
+                        return False, "Video files remain after Radarr file deletion; request and availability retained"
+            if movie is not None:
+                # Files have already been independently verified absent, or the user keeps them.
+                result = await client.delete(f"/api/v3/movie/{movie_id}", params={"deleteFiles": "false"})
+                if result.status_code not in (200, 204, 404):
+                    return False, f"Radarr movie removal failed (HTTP {result.status_code})"
+                if await self.get_movie_strict(movie_id) is not None:
+                    return False, "Radarr movie record still exists"
+            return True, "Movie record removed; video file absence verified" if delete_files else "Movie record removed; files retained"
+        except Exception as exc:
+            # Avoid logging response bodies or URLs containing credentials.
+            logger.warning("Radarr deletion could not be verified (%s)", type(exc).__name__)
+            return False, f"Radarr deletion could not be verified ({type(exc).__name__})"
 
     async def get_movie(self, movie_id: int) -> Optional[dict]:
         """

@@ -167,6 +167,7 @@
             </p>
 
             <div class="inset" style="max-height: 160px; overflow-y: auto;">
+                <p class="hint">TV deletion is temporarily unavailable while season-safe deletion is implemented. A selection containing TV will be rejected before any deletion.</p>
                 <ul id="bulk-delete-list" style="margin: 0; padding-left: 18px; color: var(--muted);">
                     <!-- Populated by JavaScript -->
                 </ul>
@@ -323,7 +324,11 @@
 
             if (response.ok) {
                 const results = await response.json();
-                progress.textContent = `${results.length} / ${total} deleted`;
+                const completed = results.filter(result => result.status === 'complete').length;
+                progress.textContent = `${completed} / ${total} deleted`;
+                if (completed < results.length) {
+                    alert('Some deletions are incomplete. Failed requests were retained; review the deletion logs.');
+                }
 
                 // Refresh page after short delay
                 setTimeout(() => {

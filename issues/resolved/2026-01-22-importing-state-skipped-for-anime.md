@@ -1,3 +1,14 @@
+# Resolution — 2026-10-20
+
+**Status: Resolved on DEV; production remains on hold.**
+
+Import-complete events show Imported while current state accurately remains Matching. The proposed artificial in-progress state is superseded; current DEV flow and timeline validation passed.
+
+See [current tests and limitations](../../docs/TESTING.md). The entries below
+are chronological investigation history; earlier pending statements are superseded.
+
+---
+
 # Bug: IMPORTING State Skipped for Anime
 
 **Priority:** Medium

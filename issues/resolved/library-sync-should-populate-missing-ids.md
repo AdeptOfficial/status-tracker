@@ -1,3 +1,14 @@
+# Resolution — 2026-10-20
+
+**Status: Resolved on DEV; production remains on hold.**
+
+Missing-ID repair and History filters passed regression/browser coverage and DEV visual review. The two prior real DEV syncs returned zero additions, updates or errors after identity reconciliation.
+
+See [current tests and limitations](../../docs/TESTING.md). The entries below
+are chronological investigation history; earlier pending statements are superseded.
+
+---
+
 # Feature: Library Sync Should Populate Missing IDs
 
 **Created:** 2026-01-22
@@ -66,4 +77,4 @@ production deployment or destructive media operation.
 Browser coverage exercises the real admin route with isolated mocked services.
 History source/user filters, counts and retained tabs are covered. Existing
 `Library Sync` rows remain compatible without a data migration. See
-[testing instructions](../docs/TESTING.md) for visual review and limitations.
+[testing instructions](../../docs/TESTING.md) for visual review and limitations.

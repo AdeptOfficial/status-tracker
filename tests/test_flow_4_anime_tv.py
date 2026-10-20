@@ -522,6 +522,11 @@ class TestAnimeTVVerification:
         request = result.scalar_one()
 
         with patch("app.services.jellyfin_verifier.jellyfin_client") as mock_client:
+            mock_client.get_series_episodes = AsyncMock(return_value=[
+                {"Id": f"episode-{ep.id}", "ParentIndexNumber": ep.season_number,
+                 "IndexNumber": ep.episode_number, "Path": f"/synthetic/{ep.id}.mkv"}
+                for ep in request.episodes
+            ])
             mock_client.find_item_by_tvdb = AsyncMock(
                 return_value={
                     "Id": "series123",
@@ -573,6 +578,11 @@ class TestAnimeTVVerification:
         request = result.scalar_one()
 
         with patch("app.services.jellyfin_verifier.jellyfin_client") as mock_client:
+            mock_client.get_series_episodes = AsyncMock(return_value=[
+                {"Id": f"episode-{ep.id}", "ParentIndexNumber": ep.season_number,
+                 "IndexNumber": ep.episode_number, "Path": f"/synthetic/{ep.id}.mkv"}
+                for ep in request.episodes
+            ])
             mock_client.find_item_by_tvdb = AsyncMock(return_value=None)
             mock_client.find_item_by_tmdb = AsyncMock(return_value=None)
             mock_client.search_by_title = AsyncMock(

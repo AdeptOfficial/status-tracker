@@ -34,13 +34,13 @@ I'm continuing work on the **status-tracker** app. Read these files for context:
 ### Bugs Still Open
 
 1. **IMPORTING State Skipped** - Anime goes DOWNLOADED → ANIME_MATCHING
-   - Issue: `issues/2026-01-22-importing-state-skipped-for-anime.md`
+   - Issue: `issues/resolved/2026-01-22-importing-state-skipped-for-anime.md`
 
 2. **Episode Progress Display** - Shows "x ready" not "x downloaded, y ready"
    - Issue: `issues/ui-episode-progress-improvements.md`
 
 3. **Library Sync Missing IDs** - Sync button should populate missing jellyfin_id
-   - Issue: `issues/library-sync-should-populate-missing-ids.md`
+   - Issue: `issues/resolved/library-sync-should-populate-missing-ids.md`
 
 ---
 

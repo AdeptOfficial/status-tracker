@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import MediaRequest, RequestState, DeletionLog
+from app.models import MediaRequest, MediaType, RequestState, DeletionLog
 from app.services.auth import get_current_user, AuthenticatedUser
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,32 @@ from app.services.state_calculator import season_episodes  # noqa: E402
 templates.env.globals["season_episodes"] = season_episodes
 from app.services.episode_progress import episode_summary, episode_percent
 templates.env.globals.update(episode_summary=episode_summary, episode_percent=episode_percent)
+
+
+def show_key(row):
+    if row.media_type != MediaType.TV:
+        return ("request", row.id)
+    if row.tvdb_id:
+        return ("tvdb", row.tvdb_id)
+    if row.tmdb_id:
+        return ("tmdb", row.tmdb_id)
+    return ("request", row.id)
+
+
+async def season_groups_for(db, rows):
+    keys = {show_key(r) for r in rows if r.media_type == MediaType.TV}
+    if not keys:
+        return {}
+    siblings = list((await db.scalars(select(MediaRequest).where(
+        MediaRequest.media_type == MediaType.TV
+    ).options(selectinload(MediaRequest.episodes)).order_by(MediaRequest.id))).all())
+    groups = {}
+    for sibling in siblings:
+        key = show_key(sibling)
+        if key in keys and sibling.season is not None:
+            groups.setdefault(key, {})[sibling.season] = sibling
+    return {r.id: sorted(groups.get(show_key(r), {}).values(), key=lambda s: s.season)
+            for r in rows}
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -92,13 +118,20 @@ async def index(
     )
 
     result = await db.execute(stmt)
-    requests = result.scalars().all()
+    requests = list(result.scalars().all())
+    season_groups = await season_groups_for(db, requests)
+    # Prefer a transferring season as the show card's lead; retain sibling states.
+    priority = {"downloading": 0, "importing": 1, "anime_matching": 2, "grabbing": 3}
+    requests.sort(key=lambda r: priority.get(r.state.value, 4))
+    shown = set()
+    requests = [r for r in requests if show_key(r) not in shown and not shown.add(show_key(r))]
 
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,  # Required by Jinja2
             "requests": requests,
+            "season_groups": season_groups,
             "active_page": "home",
             "is_admin": user.is_admin if user else False,
             "current_user": user,
@@ -223,6 +256,7 @@ async def request_detail(
         context={
             "request": request,  # Required by Starlette
             "media_request": media_request,  # MediaRequest object for template
+            "related_seasons": (await season_groups_for(db, [media_request])).get(media_request.id, []),
             "timeline_events": timeline_events,
             "jellyfin_url": settings.JELLYFIN_URL,
             "active_page": None,

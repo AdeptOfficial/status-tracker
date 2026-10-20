@@ -81,6 +81,7 @@ async def run_migrations(conn):
             "is_anime": ("BOOLEAN", "0"),  # For Shoko sync determination
         },
         "requests": {
+            "deletion_movie_path": ("VARCHAR(1000)", "NULL"),
             "alternate_titles": ("TEXT", "NULL"),  # JSON array of alternate titles for Shoko matching
             "match_failure_reason": ("VARCHAR(500)", "NULL"),  # Why Shoko auto-link failed
             "vfs_rebuild_at": ("DATETIME", "NULL"),  # Last Shokofin VFS rebuild attempt

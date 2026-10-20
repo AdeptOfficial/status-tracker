@@ -109,13 +109,14 @@ class JellyseerrPlugin(ServicePlugin):
         tmdb_id = media.get("tmdbId")
         tvdb_id = media.get("tvdbId")
 
-        # Try to find existing request
-        request = await correlator.find_by_any(
-            db,
-            jellyseerr_id=jellyseerr_id,
-            tmdb_id=tmdb_id,
-            tvdb_id=tvdb_id,
-        )
+        # A new TV request ID is a distinct request, even for the same show.
+        # Provider IDs identify the show, not the season the user requested.
+        if media.get("media_type") == "tv" and jellyseerr_id and notification_type in {"MEDIA_PENDING", "MEDIA_AUTO_APPROVED"}:
+            request = await correlator.find_by_jellyseerr_id(db, jellyseerr_id)
+        else:
+            request = await correlator.find_by_any(
+                db, jellyseerr_id=jellyseerr_id, tmdb_id=tmdb_id, tvdb_id=tvdb_id,
+            )
 
         if notification_type == "MEDIA_PENDING":
             # New request - create if doesn't exist
@@ -143,7 +144,17 @@ class JellyseerrPlugin(ServicePlugin):
             return request
 
         if notification_type == "MEDIA_AVAILABLE":
-            # Jellyseerr detected media is available in Jellyfin
+            # A show notification must not complete an unverified season.
+            if request and request.media_type == MediaType.TV:
+                from app.services.jellyfin_verifier import verify_request
+                from sqlalchemy import select
+                from sqlalchemy.orm import selectinload
+                request = await db.scalar(select(MediaRequest).options(
+                    selectinload(MediaRequest.episodes)
+                ).where(MediaRequest.id == request.id))
+                if request.state != RequestState.AVAILABLE:
+                    await verify_request(request, db)
+                return request
             if request:
                 # Mark all episodes as available (for TV shows)
                 for episode in request.episodes:

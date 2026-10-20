@@ -176,5 +176,16 @@
                 Retry
             </button>
         {% endif %}
+        {% set related = (season_groups|default({})).get(request.id, []) %}
+        {% if related|length > 1 %}
+        <div class="season-summary" data-season-summary style="margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 6px;">
+            {% for sibling in related %}
+            <div class="statline" style="margin: 0;">
+                <span class="sub">S{{ '%02d'|format(sibling.season) }}</span>
+                <span class="chip st-{{ sibling.state.value }}">{{ 'Requested' if sibling.state.value in ['requested', 'approved'] else state_labels.get(sibling.state.value, sibling.state.value) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
 </a>

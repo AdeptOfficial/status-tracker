@@ -115,11 +115,15 @@ class SonarrPlugin(ServicePlugin):
             logger.warning("Sonarr webhook missing tvdbId")
             return None
 
-        # Find existing request by tvdb_id or download hash
+        seasons = {ep.get("seasonNumber") for ep in payload.get("episodes", [])
+                   if isinstance(ep.get("seasonNumber"), int)}
+        season = next(iter(seasons)) if len(seasons) == 1 else None
+        # Find the requested season, not another active season of the same show.
         request = await correlator.find_by_any(
             db,
             tvdb_id=tvdb_id,
             qbit_hash=download_id,
+            season=season,
         )
 
         if not request:

@@ -108,7 +108,7 @@ for episode in request.episodes:
 
 | Bug | Issue File | Status |
 |-----|------------|--------|
-| IMPORTING state skipped for anime | `docs/issues/2026-01-22-importing-state-skipped-for-anime.md` | Open |
+| IMPORTING state skipped for anime | `docs/issues/resolved/2026-01-22-importing-state-skipped-for-anime.md` | Open |
 | Episode progress "0/12 ready" display | `issues/ui-episode-progress-improvements.md` | Open (UI only shows "ready", not "downloaded") |
 | Bocchi episodes stuck at Matching | N/A | Existing data issue, new requests will work |
 

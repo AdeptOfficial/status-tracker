@@ -243,6 +243,24 @@
                 </section>
             {% endif %}
 
+            {% if related_seasons|default([])|length > 1 %}
+            <section class="card" data-related-seasons>
+                <h2>// requested seasons</h2>
+                {% for sibling in related_seasons %}
+                <a href="/request/{{ sibling.id }}" class="statline" style="margin-top: 12px; gap: 12px; flex-wrap: wrap; color: var(--signal); text-decoration: none;" data-related-season="{{ sibling.season }}">
+                    <span>Season {{ sibling.season }}{% if sibling.id == media_request.id %} · viewing{% endif %}</span>
+                    <span class="chip st-{{ sibling.state.value }}">{{ 'Requested' if sibling.state.value in ['requested', 'approved'] else state_labels.get(sibling.state.value, sibling.state.value) }}</span>
+                </a>
+                {% if sibling.state.value in ['requested', 'approved'] and not sibling.episodes %}
+                <p class="sub">Waiting for a download.</p>
+                {% else %}
+                {% set sibling_summary = episode_summary(sibling) %}
+                <p class="sub">{{ sibling_summary.downloaded }}/{{ sibling_summary.total }} downloaded · {{ sibling_summary.ready }}/{{ sibling_summary.total }} ready</p>
+                {% endif %}
+                {% endfor %}
+            </section>
+            {% endif %}
+
             <!-- Timeline -->
             <section class="card">
                 <h2>// timeline</h2>
@@ -285,6 +303,13 @@
                 Are you sure you want to delete <b style="color: var(--ink);">{{ media_request.title }}</b>?
             </p>
 
+            {% if media_request.media_type.value == 'tv' and deletion_sync_enabled %}
+            <div class="inset warn" role="alert">
+                TV deletion is temporarily unavailable. The current service operations
+                delete the whole show, including sibling seasons. Season-safe deletion
+                and explicit whole-show confirmation must be implemented first.
+            </div>
+            {% else %}
             <div class="inset">
                 <span class="sub">This will:</span>
                 <ul>
@@ -299,6 +324,7 @@
                 </ul>
             </div>
 
+            {% endif %}
             <!-- Delete files checkbox -->
             <div style="display: flex; align-items: center; gap: 8px; margin: 14px 0;">
                 <input type="checkbox" id="delete-files" class="danger" checked>
@@ -315,7 +341,7 @@
 
             <div class="modal-actions">
                 <button onclick="hideDeleteModal()" class="btn">Cancel</button>
-                <button onclick="confirmDelete()" id="delete-confirm-btn" class="btn danger">Delete</button>
+                <button onclick="confirmDelete()" id="delete-confirm-btn" class="btn danger" {% if media_request.media_type.value == 'tv' and deletion_sync_enabled %}disabled{% endif %}>Delete</button>
             </div>
 
             <!-- Loading state -->
@@ -460,8 +486,13 @@
             });
 
             if (response.ok) {
-                // Success - redirect to history
-                window.location.href = '/history';
+                const result = await response.json();
+                if (result.status !== 'complete') {
+                    alert('Deletion incomplete. The request was retained. See deletion log ' + result.id + ' for service results.');
+                    hideDeleteModal();
+                } else {
+                    window.location.href = '/history';
+                }
             } else if (response.status === 401) {
                 alert('Authentication required. Please log in with your Jellyfin account.');
                 hideDeleteModal();
@@ -477,6 +508,8 @@
             console.error('Delete error:', err);
             alert(`Delete failed: ${err.message}`);
             hideDeleteModal();
+        } finally {
+            confirmBtn.disabled = {{ 'true' if media_request.media_type.value == 'tv' and deletion_sync_enabled else 'false' }};
         }
     }
 

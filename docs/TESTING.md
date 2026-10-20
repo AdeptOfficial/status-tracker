@@ -1,4 +1,174 @@
+# Current validation — 2026-10-20
+
+226 isolated regressions pass, including the exact deployed runtime image.
+Permanent Firefox acceptance passes live updates/reconnect, season navigation,
+local timestamps, History filters and responsive layouts. DEV Cyberpunk S1
+completed automatic discovery with10/10 Ready; all ten video paths were read
+inside Jellyfin, and the user confirmed S1E1 playback. S2 remains Approved.
+
+Run `./run_tests.sh -q --disable-warnings`, then `./run_browser_tests.sh`.
+The suites use synthetic data; never mount server secrets or live databases.
+The runtime-image and live checks are recorded in the diary. Existing warnings
+remain. S2 import, regular-media request flows, a fresh re-request, TV/anime
+removal and physical-device/proxy coverage remain separate validation work.
+
+Movie deletion now has a separate live pass: Interstellar audit70 verified actual
+file and library absence, cleared service records and preserved all other tracker
+states. Old failed audit69 remains in history. A new request/download was not
+submitted. See [permission setup and evidence](MEDIA-PERMISSIONS.md).
+The disposable preflight was tested for denied access, shared-group success,
+root rejection, existing-file preservation and cleanup, then passed on DEV.
+A separate isolated cross-writer test verified setgid/umask002 inheritance and
+rename/deletion between UID911 and UID1000 in shared GID1000.
+Current image `status-tracker:verified-delete-20261020`; nullable retry-path
+migration and existing-data persistence are covered.
+
+The sections below are chronological evidence. Older counts, images and pending
+statements describe earlier builds and are superseded by this current summary.
+
+---
+
+## October 20 — real DEV flow verified: Cyberpunk S1 Ready, S2 separate
+
+At14:50:24 UTC, tracker21/Jellyseerr151 reached AVAILABLE with10/10 S1 episodes.
+Tracker22/Jellyseerr150 remained APPROVED for S2, with no download or episode rows.
+All ten new files downloaded, imported as hardlinks (nlink2), matched in Shoko,
+were discovered by automatic recovery and verified in Jellyfin. Independent
+read-only real-API checks in a disposable database found10 Shoko matches and10
+playable episodes with zero unnecessary scans. A one-byte read from each actual
+VFS video path inside Jellyfin succeeded. User playback itself was not tested.
+
+The decisive automatic sequence: ShokoClearPluginCache completed at14:49:25.042
+UTC; library scan started14:49:25.247 and completed14:49:38.576. No manual scan,
+VFS/media deletion for recovery, retry-budget reset, or direct Ready update.
+The earlier metadata-task attempt failed; the exact installed plugin source and
+VFS preview identified stale in-memory generation data (38 old vs48 expected
+files). Current recovery waits for memory-cache clearing to finish before scanning.
+
+Final DEV image `status-tracker:cache-20261020`;192 regressions pass in that image.
+Permanent Firefox acceptance passes season navigation/live updates; final real
+DEV home and both detail pages pass320/390/768/1440/2048px. Existing test warnings
+remain. Current rollback `status-tracker:before-cache-20261020` is the preceding
+metadata-recovery build; the stable season-only fallback is
+`status-tracker:seasons-20261020`. Stopped-app backups are retained under
+`/opt/backups/status-tracker-before-cache-20261020` and the prior release folders.
+
+DEV free space18.05 GiB. Earlier authorized Kaguya removal reclaimed12.53 GiB;
+active test media and request20 were preserved. Watcher stopped after observing
+all10 episodes AVAILABLE. Refresh jobs retire on their next scheduled check
+without another scan once availability is verified. Production untouched by this
+work. Source remains uncommitted; content candidate remains deferred/unpublished.
+
+## October 20 — current DEV cache recovery correction
+
+Current image `status-tracker:cache-20261020`; rollback
+`status-tracker:before-cache-20261020`; stopped data/source backup
+`/opt/backups/status-tracker-before-cache-20261020`. 192 isolated regressions pass
+in the runtime image. Startup health passes; UI from the season release retained.
+
+The metadata-task hypothesis below was disproved on the installed Shokofin
+6.0.5.11: its task completed at14:43:39 UTC but still no Cyberpunk series appeared.
+Exact-version source shows AutoRefresh updates existing library entities only and
+must not overlap a library scan. Removed that recovery dispatch. The VFS preview
+instead saw48 files versus38 existing, including the ten new Cyberpunk files,
+while ordinary scans kept the cached structure. Shoko SignalR is Connected.
+
+Recovery now discovers ShokoClearPluginCache by exact task key, requires library,
+metadata and cache tasks Idle, clears only plugin memory caches, confirms a new
+Completed task result, then starts a library scan. Unknown/missing/busy/failed
+states prevent scanning. Attempts remain bounded/persisted; no media or VFS
+entries are directly deleted and no manual scan or job-budget reset was used.
+Real playable verification remains pending the existing automatic retry schedule.
+
+Source inspected at tag v6.0.5-dev.11:
+https://github.com/ShokoAnime/Shokofin/blob/v6.0.5-dev.11/Shokofin/Tasks/ClearPluginCacheTask.cs
+https://github.com/ShokoAnime/Shokofin/blob/v6.0.5-dev.11/Shokofin/Events/MetadataRefreshService.cs
+
+## October 20 — separate season identity and Shokofin discovery (DEV)
+
+Current DEV image: `status-tracker:discovery-20261020`; rollback:
+`status-tracker:before-discovery-20261020`. Backup:
+`/opt/backups/status-tracker-before-discovery-20261020` (stopped data/source).
+189 isolated regressions pass in the exact runtime image. Firefox acceptance
+passes related-season labels/navigation, SSE and responsive layouts; real DEV
+home and requests21/22 pass at 320/390/768/1440/2048px.
+
+New Jellyseerr TV request IDs remain distinct. Sonarr correlation includes season;
+ambiguous provider-only matches fail closed. TV Jellyfin/Jellyseerr availability
+notifications use per-episode verification. Related seasons share an active card
+and link to separate detail timelines/progress. Backed-up live repair retained
+S1 tracker21's ten episodes/history, assigned Jellyseerr151, and restored S2 as
+tracker22/Jellyseerr150 Approved. Audit events explain the original mixed history.
+
+Real S1 download/import completed; all ten files are hardlinked and Shoko-matched.
+Standard automatic Jellyfin scans alone did not discover the series. Installed
+ShokoAutoRefreshMetadata task had last run in January. Recovery now discovers its
+ID by exact key and invokes it after an accepted library scan, within the existing
+persisted retry budget/backoff. Running tasks are not restarted; missing/failed
+metadata refresh is recorded. No VFS deletion or manual scan. Actual playable
+Jellyfin verification is still pending; do not call end-to-end flow passed yet.
+DEV has about18.2 GiB free after authorized removal of older Kaguya media.
+Production and publication remain user-gated.
+
 # Status Tracker testing
+
+## 2026-10-20: Review findings fixed and redeployed to DEV
+
+- Fixed wrong-season readiness: verification now strictly filters the requested
+  season, including season0, without the display helper's fallback to other rows.
+- Missed-event recovery confirms the current file before deduplicating by file ID.
+  An old job no longer blocks replacement files; the same file's terminal status
+  and retry budget remain unchanged.
+- Verification failures now roll back only that request's uncommitted changes,
+  defer its jobs with `verification_failed`, reload expired ORM state and continue
+  unrelated requests. Successful request changes commit independently.
+- Seven permanent review regressions cover wrong-season/specials, replacement
+  files, terminal-job deduplication and failure isolation in either request order,
+  including rollback of flushed mutations. Full suite:177 pass, also in the exact
+  release image (1470 existing warnings). Permanent Firefox acceptance passes.
+- DEV image `status-tracker:refresh-review-20261020`; rollback image
+  `status-tracker:before-refresh-review-20261020`. Fresh stopped-app backup:
+  `/opt/backups/status-tracker-before-refresh-review-20261020` (data/source).
+  No schema change in this follow-up. Existing Compose/secrets/data preserved.
+- Real APIs again verify request20's 12 Shoko matches and 12 playable episodes
+  using a disposable tracker DB; no scan or live data changes. Original tables
+  match backup, integrity/health pass. Next normal import remains the unattended
+  discovery acceptance test, as chosen by the user. Production unchanged.
+
+
+## 2026-10-20: Persistent automatic library refresh on DEV
+
+- Replaced the automatic SSH/VFS-delete fallback with durable refresh intents,
+  confirmed Shoko event/path evidence, a 30-second debounce and one API scan per
+  due batch. Existing scans are respected; minimum spacing is 120 seconds, with
+  four persisted attempts and exponential backoff. Duplicate evidence never
+  resets the budget. Exhausted jobs retain diagnostic codes; no automatic retry
+  reset is provided. The deployment uses one fallback worker.
+- Missing SignalR events can be recovered from imported paths through Shoko's
+  installed v3 PathEndsWith API. Ambiguous, inaccessible and unassociated files
+  do not queue refreshes. An ID or elapsed time alone is not match evidence.
+- TV verification now checks playable season/episode entries rather than treating
+  a series directory as proof that an entire season is ready. Partial seasons and
+  metadata-only episodes stay incomplete; known missing episode rows block Ready.
+- 170 isolated regressions pass, including full missed-event → automatic scan →
+  Available recovery with mocked service boundaries. All 170 also pass in the
+  exact deployment image; existing deprecation/async warnings remain (1416 there).
+  Permanent Firefox acceptance passes SSE/reconnect, local time, History and
+  320/390/768/1440/2048px layouts.
+- DEV image `status-tracker:refresh-20261020`, rollback `status-tracker:before-refresh-20261020`.
+  Backup `/opt/backups/status-tracker-before-refresh-20261020` contains stopped-app
+  data and prior app source. Additive `library_refresh_jobs` table only. All prior
+  rows unchanged (11 requests, 37 episodes, 71 timeline events, 68 deletion logs,
+  716 deletion-sync events), integrity OK, health/database/Shoko connected.
+- A disposable in-memory tracker using real DEV APIs confirms all 12 Shoko matches
+  and playable Jellyfin episodes for request 20, with zero unnecessary scans and
+  no live data changes. This is not proof of discovery after a fresh import.
+  User chose deployment now and observation on the next normal request; no new
+  download, media deletion, manual scan, production deployment or publication.
+- Initial deployment-script extraction hit the DEV Python version's unsupported
+  tar filter argument; rollback restarted the old image. Retried with validated
+  archive paths and existing backup; final deployment succeeded.
+
 
 ## Latest DEV import validation (October 17)
 

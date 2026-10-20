@@ -102,6 +102,7 @@ class JellyfinPlugin(ServicePlugin):
             db,
             tmdb_id=tmdb_id,
             tvdb_id=tvdb_id,
+            season=self._parse_provider_id(payload.get("SeasonNumber")) if item_type == "Episode" else None,
         )
 
         if not request:
@@ -110,6 +111,18 @@ class JellyfinPlugin(ServicePlugin):
                 f"(tmdb={tmdb_id}, tvdb={tvdb_id})"
             )
             return None
+
+        if request.media_type == MediaType.TV:
+            # ItemAdded is a prompt to verify, not evidence for the entire season.
+            from app.services.jellyfin_verifier import verify_request
+            from sqlalchemy import select
+            from sqlalchemy.orm import selectinload
+            request = await db.scalar(select(MediaRequest).options(
+                selectinload(MediaRequest.episodes)
+            ).where(MediaRequest.id == request.id))
+            if request.state != RequestState.AVAILABLE:
+                await verify_request(request, db)
+            return request
 
         # Skip if already available
         if request.state == RequestState.AVAILABLE:
@@ -156,7 +169,7 @@ class JellyfinPlugin(ServicePlugin):
 
     def _parse_provider_id(self, value: Optional[str]) -> Optional[int]:
         """Parse provider ID string to int, handling None and empty strings."""
-        if not value:
+        if value is None or value == "":
             return None
         try:
             return int(value)

@@ -64,8 +64,8 @@ MAX_RETRIES = 3             # Number of retry attempts
 STUCK_THRESHOLD_MINUTES = 2
 
 # VFS regeneration delay - time to wait for Shokofin to process SignalR events
-# NOTE: We do NOT trigger library scans - they interfere with Shokofin's SignalR processing.
-# Shokofin receives file events from Shoko via SignalR and regenerates VFS automatically.
+# Immediate verification waits for normal Shokofin discovery. The durable refresh
+# coordinator provides delayed, coalesced recovery when discovery is missed.
 VFS_REGENERATION_DELAY = 10  # seconds
 
 
@@ -290,38 +290,44 @@ async def _mark_movie_available(
 async def _mark_tv_available(
     request: MediaRequest, item: dict, db: "AsyncSession", verification_type: str
 ) -> bool:
-    """Mark TV request and all episodes as available.
-
-    For MVP, we verify at series level. Individual episode verification
-    can be added later if needed.
-    """
+    """Require individual playable episodes, not merely a series directory."""
     from app.models import EpisodeState
-
-    request.jellyfin_id = item.get("Id")
+    # Display helpers may fall back to other seasons; availability must not.
+    episodes = [ep for ep in request.episodes
+                if request.season is None or ep.season_number == request.season]
+    if not episodes or not item.get("Id"):
+        return False
+    found = await jellyfin_client.get_series_episodes(item["Id"])
+    if found is None:
+        return False
+    playable = {}
+    for entry in found:
+        if is_playable(entry) and entry.get("Id"):
+            season, number = entry.get("ParentIndexNumber"), entry.get("IndexNumber")
+            if isinstance(season, int) and isinstance(number, int):
+                end = entry.get("IndexNumberEnd") or number
+                if not isinstance(end, int) or end < number or end - number > 100:
+                    continue
+                for n in range(number, end + 1):
+                    playable[(season, n)] = entry
+    changed = False
+    for episode in episodes:
+        entry = playable.get((episode.season_number, episode.episode_number))
+        if entry:
+            changed |= episode.state != EpisodeState.AVAILABLE
+            episode.state = EpisodeState.AVAILABLE
+            episode.jellyfin_id = entry["Id"]
+    request.jellyfin_id = item["Id"]
+    if len(episodes) < (request.total_episodes or 0) or not all(ep.state == EpisodeState.AVAILABLE for ep in episodes):
+        if changed:
+            await db.commit()
+            await broadcaster.broadcast_update(request)
+        return False
     request.available_at = datetime.utcnow()
-
-    # Mark all episodes as available (series-level verification for MVP)
-    for episode in request.episodes:
-        episode.state = EpisodeState.AVAILABLE
-
     await state_machine.transition(
-        request,
-        RequestState.AVAILABLE,
-        db,
-        service="jellyfin",
-        event_type="Verified",
-        details=f"Series found in Jellyfin ({verification_type})",
-        raw_data={
-            "jellyfin_item_id": item.get("Id"),
-            "jellyfin_item_type": item.get("Type"),
-            "verification_type": verification_type,
-            "episodes_marked": len(request.episodes),
-        },
-    )
-
-    logger.info(
-        f"TV verified: {request.title} → AVAILABLE "
-        f"({len(request.episodes)} episodes, Jellyfin ID: {item.get('Id')})"
+        request, RequestState.AVAILABLE, db, service="jellyfin", event_type="Verified",
+        details=f"Episodes verified in Jellyfin ({verification_type})",
+        raw_data={"jellyfin_item_id": item["Id"], "episodes_marked": len(episodes)},
     )
     return True
 
@@ -498,7 +504,7 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
     - Verification task failed
     - SignalR connection dropped during processing
     - Regular TV/movies waiting for library scan
-    - Shokofin VFS not synced (triggers auto-rebuild after 3 minutes)
+    - Missed Shoko match events (queues a non-destructive API refresh after confirmation)
 
     WHY check DOWNLOADED? If Sonarr's Import webhook never fires (manual import,
     webhook config issue), the request stays stuck at DOWNLOADED forever.
@@ -547,9 +553,6 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
 
     transitioned = []
 
-    # Check for anime requests that need VFS rebuild
-    # This handles the case where Shoko matched the file but Shokofin's VFS didn't sync
-    await _check_and_rebuild_vfs_if_needed(stuck_requests, db)
 
     # Log SignalR state for debugging
     if settings.ENABLE_SHOKO and settings.SHOKO_API_KEY:
@@ -583,6 +586,8 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
                     f"[FALLBACK] Verified: {request.title} ({previous_state} → AVAILABLE)"
                 )
             else:
+                from app.services.library_refresh import recover_matched_files
+                await recover_matched_files(request, db)
                 # A timeout is not evidence of import or Shoko matching.
                 # Keep the observed stage; future verification still recovers
                 # missed webhooks by confirming actual Jellyfin availability.
@@ -594,8 +599,8 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
                 f"[FALLBACK] Error checking request {request.id}: {e}"
             )
 
+    await db.commit()  # Persist recovered refresh intents even without a state change.
     if transitioned:
-        await db.commit()
         # Broadcast AFTER commit so frontend fetches committed data
         for request in transitioned:
             await broadcaster.broadcast_update(request)
@@ -608,105 +613,3 @@ async def check_stuck_requests_fallback(db: "AsyncSession") -> list[MediaRequest
 
 # Keep the old name as an alias for backwards compatibility
 check_anime_matching_fallback = check_stuck_requests_fallback
-
-
-# =============================================================================
-# VFS Rebuild Helper (for stuck ANIME_MATCHING requests)
-# =============================================================================
-
-
-async def _check_and_rebuild_vfs_if_needed(
-    requests: list[MediaRequest], db: "AsyncSession"
-) -> None:
-    """Check anime requests stuck in ANIME_MATCHING and rebuild VFS if needed.
-
-    This handles the case where Shoko matched a file but Shokofin's VFS
-    didn't create an entry. After 3 minutes stuck, we:
-    1. Check if VFS entry exists
-    2. If not, delete VFS folder and trigger library refresh
-    3. Immediately verify in Jellyfin after rebuild
-
-    Args:
-        requests: List of stuck requests to check
-        db: Database session
-    """
-    from app.services.shokofin_vfs import (
-        should_attempt_vfs_rebuild,
-        check_vfs_entry_exists,
-        rebuild_vfs_for_library,
-    )
-
-    # Group anime requests by media type for potential batch VFS rebuild
-    anime_movies_needing_rebuild = []
-    anime_tv_needing_rebuild = []
-
-    for request in requests:
-        if not should_attempt_vfs_rebuild(request, stuck_minutes=3):
-            continue
-
-        # Check if VFS entry exists
-        vfs_exists = await check_vfs_entry_exists(request)
-
-        if vfs_exists:
-            logger.debug(f"[VFS CHECK] VFS entry exists for {request.title}, skipping rebuild")
-            continue
-
-        logger.info(
-            f"[VFS CHECK] No VFS entry for {request.title} after 3+ minutes, "
-            f"queuing for VFS rebuild"
-        )
-
-        if request.media_type == MediaType.MOVIE:
-            anime_movies_needing_rebuild.append(request)
-        else:
-            anime_tv_needing_rebuild.append(request)
-
-    # Rebuild VFS for anime movies if any need it
-    if anime_movies_needing_rebuild:
-        logger.info(
-            f"[VFS REBUILD] Rebuilding Anime Movies VFS for "
-            f"{len(anime_movies_needing_rebuild)} stuck requests"
-        )
-
-        success = await rebuild_vfs_for_library(MediaType.MOVIE)
-
-        if success:
-            # Mark rebuild timestamp and trigger immediate verification
-            for request in anime_movies_needing_rebuild:
-                request.vfs_rebuild_at = datetime.utcnow()
-
-                # Trigger immediate Jellyfin verification
-                verified = await verify_request(request, db)
-                if verified:
-                    logger.info(f"[VFS REBUILD] Verified after rebuild: {request.title} → AVAILABLE")
-
-            await db.commit()
-
-            # Broadcast updates
-            for request in anime_movies_needing_rebuild:
-                await broadcaster.broadcast_update(request)
-
-    # Rebuild VFS for anime TV if any need it
-    if anime_tv_needing_rebuild:
-        logger.info(
-            f"[VFS REBUILD] Rebuilding Anime Shows VFS for "
-            f"{len(anime_tv_needing_rebuild)} stuck requests"
-        )
-
-        success = await rebuild_vfs_for_library(MediaType.TV)
-
-        if success:
-            # Mark rebuild timestamp and trigger immediate verification
-            for request in anime_tv_needing_rebuild:
-                request.vfs_rebuild_at = datetime.utcnow()
-
-                # Trigger immediate Jellyfin verification
-                verified = await verify_request(request, db)
-                if verified:
-                    logger.info(f"[VFS REBUILD] Verified after rebuild: {request.title} → AVAILABLE")
-
-            await db.commit()
-
-            # Broadcast updates
-            for request in anime_tv_needing_rebuild:
-                await broadcaster.broadcast_update(request)

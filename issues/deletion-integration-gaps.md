@@ -5,7 +5,52 @@
 **Created:** 2026-01-21
 **Category:** Bug / Integration
 
-## Problems
+## October 20 corrected live movie retry: PASSED (issue remains open)
+
+DEV `status-tracker:verified-delete-20261020`;226 regressions and browser suite
+pass. Actual process identity confirmed; scoped directory group-write repair and
+verified file-first deletion resolved the Interstellar failure. Audit70 Complete:
+real file removed, library item absent, provider records cleared, tracker removed,
+other requests unchanged. Audit69 remains Incomplete. Added durable retry-directory
+migration and strict API absence checks. See newest DIARY and
+[operator permission guide](../docs/MEDIA-PERMISSIONS.md).
+
+Fresh re-request/import, fresh-folder creation modes, TV deletion scope and anime
+cleanup remain release blockers. No production change. No new download submitted.
+
+## October 20 original live movie test: FAILED (historical evidence)
+
+Authorized DEV Interstellar deletion falsely reported Complete. Radarr removed
+its movie record despite file permission failure; tracker/Jellyseerr records were
+then removed, but the 4.21GiB file and Jellyfin library item remained. Corrected
+audit69 to Incomplete and restored tracker19 as Failed. Do not retry with stale
+service IDs until file verification and reconciliation are implemented. See newest
+DIARY entry for exact evidence, permissions and private backup location.
+
+Also reproduced: Jellyfin `get_item` treats HTTP400 as None; `/Items` listing
+confirmed the supposedly missing item. Verification must distinguish an API error
+from an actual404. Re-request flow is NOT passed by an empty Jellyseerr record.
+
+## October 20 current status
+
+**Release blocker; partially mitigated on DEV.** See newest DIARY entry.
+The whole-show scope bug and early tracker removal were reproduced by code review
+and isolated tests. DEV now blocks TV deletion (single/bulk/external paths) rather
+than risk sibling seasons. Failed service operations retain tracker records;
+keeping files preserves Jellyseerr availability. 199 regressions and browser
+acceptance pass. No real media deletion or re-request was performed.
+
+Remaining acceptance: season-only file operations and monitoring; active-download
+handling; explicit whole-show confirmation; shared/multi-season request handling;
+Jellyseerr season availability reconciliation; retry/restart and external-deletion
+reconciliation; synthetic end-to-end proof followed by an authorized DEV test.
+
+API research: [Jellyseerr v2.7.3 media routes](https://github.com/Fallenbagel/jellyseerr/blob/v2.7.3/server/routes/media.ts)
+delete the shared media entity; the status route does not provide a general
+single-season reset. Verify the installed version and its scan behavior before
+choosing an implementation. Do not delete shared media to reset one season.
+
+## Historical problems
 
 ### 1. Shoko Not Triggering "Remove Missing Files"
 

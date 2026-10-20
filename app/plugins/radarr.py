@@ -317,6 +317,16 @@ class RadarrPlugin(ServicePlugin):
 
         from app.services.deletion_orchestrator import delete_request
 
+        from sqlalchemy import select
+        from app.models import DeletionLog, DeletionStatus
+        active = await db.scalar(select(DeletionLog.id).where(
+            DeletionLog.radarr_id == request.radarr_id,
+            DeletionLog.status == DeletionStatus.IN_PROGRESS,
+        ).limit(1))
+        if active:
+            logger.info("Ignoring Radarr deletion echo while tracker deletion is active")
+            return
+
         movie = payload.get("movie", {})
         delete_files = payload.get("deletedFiles", False)
 

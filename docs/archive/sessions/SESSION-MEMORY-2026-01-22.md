@@ -119,7 +119,7 @@ Fix stuck media requests and implement 4 media workflows:
 - Needs: Add logging to broadcaster, check browser console
 
 ### ANIME_MATCHING State Doesn't Trigger Jellyfin Scan - ⚠️ WORKAROUND
-- **File:** `docs/issues/2026-01-22-anime-matching-no-scan.md`
+- **File:** `docs/issues/resolved/2026-01-22-anime-matching-no-scan.md`
 - Fallback triggers scan for IMPORTING but not ANIME_MATCHING
 - **Workaround:** Manual library refresh via API forces VFS rebuild
 - **Proper fix:** Add ANIME_MATCHING to scan trigger (low priority now)

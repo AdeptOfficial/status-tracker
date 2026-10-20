@@ -17,32 +17,17 @@ Request → Indexed → Downloading → Importing → [Anime Matching] → Avail
 - **Technical docs:** `docs/`
 - **Development log:** `DIARY.md`
 
-## Current Status (2026-01-22)
+## Current status (2026-10-20)
 
-### What Works
-| Flow | Status | Notes |
-|------|--------|-------|
-| Regular Movies | ✅ Working | Full flow through Radarr |
-| Regular TV Shows | ✅ Working | Full flow through Sonarr |
-| Anime Movies | ✅ Working | Via Jellyfin fallback checker (polls every 30s) |
-| Anime TV Shows | ❌ Broken | Stuck at IMPORTING - needs fallback checker extension |
-| Deletion Sync | ✅ Working | Radarr, Sonarr, Shoko, Jellyfin confirmed |
-| Jellyseerr Sync | ⚠️ Partial | Deletion works but ID resolution often fails |
-| Library Sync | ⚠️ Partial | Adds new items but doesn't update missing IDs |
+DEV verified Cyberpunk S1 request-to-playback and one regular movie deletion.
+Movie deletion now checks actual file and library removal before completion.
+TV deletion is temporarily blocked until season scope is implemented. S2 import,
+a fresh re-request cycle and anime deletion still need validation. Production
+release requires owner approval; see [roadmap](docs/ROADMAP.md).
 
-### Known Issues
-
-**High Priority:**
-- Anime TV shows stuck at IMPORTING state (`issues/design-separate-anime-movie-show-flows.md`)
-- Library sync doesn't populate missing service IDs (`issues/library-sync-missing-ids.md`)
-- Jellyseerr ID not captured on request creation (shows "not_needed" on deletion)
-
-**Medium Priority:**
-- Detail page SSE not updating download progress (`issues/detail-page-live-updates-bug.md`)
-- Missing poster on detail page (`issues/detail-page-missing-poster.md`)
-- Per-episode tracking not implemented (`issues/per-episode-download-tracking.md`)
-
-See `issues/` folder for full list.
+Before enabling deletion, follow [media permissions and deletion setup](docs/MEDIA-PERMISSIONS.md).
+It explains service identities, directory access, the disposable preflight,
+verification behavior and recovery. Status Tracker does not need a media mount.
 
 ## Project Structure
 
@@ -96,41 +81,11 @@ app/
         └── card.html    # Request card partial
 ```
 
-## Implementation Status
+## Validation
 
-### Core Features
-| Part | Description | Status |
-|------|-------------|--------|
-| 1 | Foundation + Plugin Framework | ✅ Complete |
-| 2 | Sonarr/Radarr Plugins | ✅ Complete |
-| 3 | qBittorrent Plugin | ✅ Complete |
-| 4 | Web Dashboard (htmx + AdepT token CSS) | ✅ Complete |
-| 5 | Real-Time Updates (SSE) | ⚠️ Partial (detail page bug) |
-| 6 | Shoko Plugin (SignalR) | ⚠️ Partial (movies only) |
-| 7 | Jellyfin Plugin | ✅ Complete |
-| 8 | Polish & Error Handling | ⏳ In Progress |
-
-### Deletion Sync Feature
-| Part | Description | Status |
-|------|-------------|--------|
-| 1 | DeletionLog + DeletionSyncEvent models | ✅ Complete |
-| 2 | Service API Clients (Radarr, Sonarr, Shoko, Jellyfin) | ✅ Complete |
-| 3 | Auth Middleware (Jellyfin tokens) | ✅ Complete |
-| 4 | Deletion Orchestrator | ✅ Complete |
-| 5 | Delete API Endpoints | ✅ Complete |
-| 6 | Dashboard Delete Button | ✅ Complete |
-| 7 | History Bulk Delete | ✅ Complete |
-| 8 | Shoko RemoveMissingFiles API | ✅ Complete |
-| 9 | Jellyseerr Library Sync Trigger | ✅ Complete |
-| 10 | Jellyseerr ID Resolution | ⚠️ Often fails (ID not stored on request) |
-| 11 | Deletion Logs Page | ✅ Complete |
-
-### Library Sync Feature
-| Part | Description | Status |
-|------|-------------|--------|
-| 1 | Add new items from Jellyfin | ✅ Complete |
-| 2 | Update existing items with missing IDs | ❌ Not implemented |
-| 3 | Cross-reference with Radarr/Sonarr/Shoko | ❌ Not implemented |
+Current DEV evidence and reproducible test commands are in
+[testing](docs/TESTING.md). Historical January completion claims are superseded by
+those results and the [release roadmap](docs/ROADMAP.md).
 
 ## Local Development
 
@@ -148,6 +103,12 @@ cp .env.template .env
 # Build and run
 docker compose up -d --build
 ```
+
+### Media permissions
+
+Read the [setup guide](docs/MEDIA-PERMISSIONS.md) before enabling
+`ENABLE_DELETION_SYNC`. A successful API response alone does not prove filesystem
+access. Run the disposable preflight under each writer's actual numeric identity.
 
 ### Network Requirements
 
@@ -198,7 +159,7 @@ FastAPI auto-generates interactive API docs:
 | `GET` | `/api/health` | Health check (service connectivity) |
 | `GET` | `/api/sse` | Server-Sent Events stream |
 | `POST` | `/hooks/{service}` | Webhook receiver (jellyseerr, sonarr, radarr, jellyfin) |
-| `DELETE` | `/api/requests/{id}` | Delete request from all services |
+| `POST` | `/api/requests/{id}/delete` | Delete request from all services |
 | `POST` | `/api/requests/bulk-delete` | Bulk delete from history |
 | `POST` | `/api/library-sync` | Trigger Jellyfin library sync |
 
@@ -230,7 +191,7 @@ curl -X POST http://localhost:8100/hooks/test -d '{}'
 **Requests stuck at IMPORTING**
 - Regular movies/TV: Check Jellyfin webhook plugin is installed and configured
 - Anime movies: Should auto-resolve via fallback checker (30s polling)
-- Anime TV: Known issue - fallback checker doesn't support TV yet
+- Anime TV: Check Shoko matches and the bounded library-refresh audit; see current testing evidence.
 
 **Database locked error**
 ```bash
@@ -245,11 +206,15 @@ docker compose up -d
 ```
 
 **SSE not updating**
-- History page: Should work
-- Detail page: Known bug - use manual refresh
+- Both pages use live updates; reconnection and detail progress are covered by browser acceptance.
 - Check browser console for connection errors
 
 **Deletion fails for specific service**
+
+Follow the [permission and retry guide](docs/MEDIA-PERMISSIONS.md). Verify the
+movie file is really gone; do not infer success from a missing Radarr record.
+TV deletion is currently blocked to preserve sibling seasons.
+
 ```bash
 # Check deletion logs
 curl http://localhost:8100/api/deletion-logs

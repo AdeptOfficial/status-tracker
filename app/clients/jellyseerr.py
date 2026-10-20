@@ -193,34 +193,27 @@ class JellyseerrClient:
             return False
 
     async def get_media_id_by_tmdb(self, tmdb_id: int, media_type: str) -> Optional[int]:
-        """
-        Look up Jellyseerr media entry ID by TMDB ID.
-
-        Jellyseerr tracks "requests" (user submissions) separately from "media"
-        (availability status). To clear the "Available" badge after deletion,
-        we need to delete the media entry, not just the request.
-
-        Args:
-            tmdb_id: TMDB ID of the movie/show
-            media_type: "movie" or "tv"
-
-        Returns:
-            mediaInfo.id if found, None otherwise
-        """
-        try:
-            client = await self._get_client()
-            response = await client.get(f"/api/v1/{media_type}/{tmdb_id}")
-
-            if response.status_code == 200:
-                data = response.json()
-                media_info = data.get("mediaInfo")
-                if media_info:
-                    return media_info.get("id")
+        """Only successful provider lookup with no mediaInfo proves no local entry."""
+        client = await self._get_client()
+        response = await client.get(f"/api/v1/{media_type}/{tmdb_id}")
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict) or data.get("id") != tmdb_id:
+            raise ValueError("Jellyseerr returned an unexpected media identity")
+        info = data.get("mediaInfo")
+        if info is None:
             return None
+        if not isinstance(info, dict) or not isinstance(info.get("id"), int):
+            raise ValueError("Invalid Jellyseerr media response")
+        return info["id"]
 
-        except Exception as e:
-            logger.error(f"Error looking up Jellyseerr media by TMDB {tmdb_id}: {e}")
-            return None
+    async def verify_request_removed(self, request_id: int) -> bool:
+        client = await self._get_client()
+        response = await client.get(f"/api/v1/request/{request_id}")
+        if response.status_code == 404:
+            return True
+        response.raise_for_status()
+        return False
 
     async def delete_media(self, media_id: int) -> tuple[bool, str]:
         """

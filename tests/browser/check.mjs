@@ -67,6 +67,12 @@ try{
  await call('browsingContext.navigate',{context,url:origin+'/',wait:'complete'});
  await until(()=>evaluate(`document.body.innerText.includes('3/5 downloaded · 1/5 ready')`),'card counters');
  console.log('PASS card counters match detail');
+ if(!await evaluate(`document.querySelector('[data-season-summary]')?.innerText.includes('S03') && document.querySelector('[data-season-summary]')?.textContent.includes('Requested')`))throw Error('Missing outstanding season on card');
+ await call('browsingContext.navigate',{context,url:origin+'/request/2',wait:'complete'});
+ if(!await evaluate(`document.querySelector('[data-related-season="3"]')?.textContent.includes('Requested')`))throw Error('Missing outstanding season on detail');
+ await evaluate(`document.querySelector('[data-related-season="3"]').click()`);
+ await until(()=>evaluate(`location.pathname==='/request/4' && document.body.innerText.includes('Waiting for a download.')`),'season navigation');
+ console.log('PASS related seasons on card/detail and separate request navigation');
  await call('browsingContext.navigate',{context,url:origin+'/history',wait:'complete'});
  if(await evaluate(`document.querySelector('#user-filter').innerText.includes('Library Sync')`))throw Error('System source listed as person');
  await evaluate(`document.querySelector('#source-filter').value='library'; document.querySelector('#source-filter').dispatchEvent(new Event('change'));`);

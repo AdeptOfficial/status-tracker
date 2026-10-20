@@ -1,7 +1,7 @@
 # UI: Episode Progress Display Improvements
 
 **Created:** 2026-01-22
-**Status:** Open
+**Status:** Partially resolved on DEV; remaining proposals below
 **Priority:** Medium
 **Component:** UI (detail.html, card.html)
 
@@ -145,14 +145,14 @@ S01E04  Passing Shower           ░░░░░░░░░░░░   0%
 
 ## Acceptance Criteria
 
-- [ ] Timeline shows "Grabbed" (past tense) not "grabbing"
-- [ ] Episode Progress shows "x downloaded, y ready" (not just "x ready")
-- [ ] Episodes show download % when in DOWNLOADING state
+- [x] Timeline shows "Grabbed" (past tense) not "grabbing"
+- [x] Episode Progress shows "x downloaded, y ready" (not just "x ready")
+- [x] Episodes show download % when in DOWNLOADING state
 - [ ] "Matching" replaced with "Downloaded" for anime TV shows (or hidden)
 - [ ] (Optional) SEARCHING state shows while Sonarr searches indexers
 - [ ] Grabbing state shows "Grabbing 3/12 episodes" for per-episode releases
 - [ ] Timeline Downloading event shows file size
-- [ ] Per-episode progress % for season packs (via qBit file API)
+- [x] Per-episode progress % for season packs (via qBit file API)
 
 ## October 17 implementation update
 
@@ -163,3 +163,10 @@ label counts downloading rows. Grab text no longer assumes every complete set
 of rows came from one season-pack torrent. Existing lifecycle labels are retained.
 See [testing](../docs/TESTING.md). Deployed DEV only; unrelated January requests
 such as SEARCHING and timeline file-size changes are not implicitly completed.
+
+## October 20 review disposition
+
+The checked items are DEV verified, including measured per-file progress, not
+copied torrent-wide percentages. Keep this umbrella issue open for the remaining
+unchecked presentation proposals. Matching remains intentional until verification;
+renaming it was not implemented. See the current roadmap for priority.

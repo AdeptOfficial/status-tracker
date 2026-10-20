@@ -15,7 +15,7 @@ async def lifespan(app):
         await conn.run_sync(Base.metadata.create_all)
     async with async_session() as db:
         db.add(MediaRequest(id=1,title='Synthetic browser test',requested_by='synthetic-reviewer',media_type=MediaType.MOVIE,state=RequestState.DOWNLOADING,download_progress=.1,download_speed='1 MB/s',download_eta='10m'))
-        tv=MediaRequest(id=2,title='Synthetic Series With a Long Descriptive Season Title',media_type=MediaType.TV,state=RequestState.DOWNLOADING,season=2,total_episodes=5,poster_url='/static/emblem.png',quality='HDTV-1080p',requested_by='synthetic-reviewer')
+        tv=MediaRequest(id=2,title='Synthetic Series With a Long Descriptive Season Title',media_type=MediaType.TV,state=RequestState.DOWNLOADING,season=2,total_episodes=5,tvdb_id=123456,poster_url='/static/emblem.png',quality='HDTV-1080p',requested_by='synthetic-reviewer')
         tv.episodes=[Episode(season_number=2,episode_number=1,state=EpisodeState.AVAILABLE),
                      Episode(season_number=2,episode_number=2,state=EpisodeState.ANIME_MATCHING),
                      Episode(season_number=2,episode_number=3,state=EpisodeState.DOWNLOADING,download_progress=.37),
@@ -23,6 +23,7 @@ async def lifespan(app):
                      Episode(season_number=1,episode_number=1,state=EpisodeState.AVAILABLE)]
         tv.episodes[2].episode_title='A Long Episode Title That Should Truncate Inside Its Row'
         db.add(tv)
+        db.add(MediaRequest(id=4,title=tv.title,media_type=MediaType.TV,state=RequestState.APPROVED,season=3,total_episodes=5,tvdb_id=123456,requested_seasons='3'))
         db.add(TimelineEvent(request_id=2,service='sonarr',event_type='Import',state=RequestState.IMPORTING,details='Imported: Synthetic.Series.With.A.Very.Long.Release.Name.S02E03.1080p.HEVC.AAC.ReleaseGroup.mkv'))
         db.add(MediaRequest(id=3,title='Synthetic import',media_type=MediaType.MOVIE,state=RequestState.AVAILABLE,jellyfin_id='fixture-library',requested_by='Library Sync'))
         await db.commit()

@@ -162,6 +162,9 @@ class MediaRequest(Base):
     download_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     final_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
 
+    # Durable disk evidence for deletion retries after service-record removal.
+    deletion_movie_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+
     # Jellyfin info (populated on AVAILABLE)
     jellyfin_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
@@ -355,3 +358,17 @@ class Episode(Base):
 
     # Relationships
     request: Mapped["MediaRequest"] = relationship(back_populates="episodes")
+
+
+class LibraryRefreshJob(Base):
+    """Durable, deduplicated refresh intent for one confirmed Shoko file."""
+    __tablename__ = "library_refresh_jobs"
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id", ondelete="CASCADE"), index=True)
+    episode_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    file_id: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime)
+    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

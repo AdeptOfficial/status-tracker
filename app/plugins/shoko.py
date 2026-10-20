@@ -161,6 +161,8 @@ async def _handle_movie_matched(
         request.shoko_series_id = event.file_id
 
     if event.has_cross_references:
+        from app.services.library_refresh import queue_refresh
+        await queue_refresh(db, request.id, event.file_id)
         # File is fully matched to AniDB - trigger Jellyfin verification
         if request.state in (RequestState.IMPORTING, RequestState.ANIME_MATCHING, RequestState.MATCH_FAILED):
             # Transition to ANIME_MATCHING to indicate Shoko has processed
@@ -231,6 +233,8 @@ async def _handle_tv_episode_matched(
         episode.shoko_file_id = str(event.file_id)
 
     if event.has_cross_references:
+        from app.services.library_refresh import queue_refresh
+        await queue_refresh(db, episode.request_id, event.file_id, episode.id)
         # Episode matched to AniDB - trigger Jellyfin verification
         if episode.state in (EpisodeState.IMPORTING, EpisodeState.ANIME_MATCHING, EpisodeState.MATCH_FAILED):
             # Keep episode in ANIME_MATCHING until Jellyfin verifies

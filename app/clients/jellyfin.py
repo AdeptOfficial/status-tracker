@@ -184,30 +184,35 @@ class JellyfinClient:
             return False, error_msg
 
     async def get_item(self, item_id: str) -> Optional[dict]:
+        """Return a library item; only an empty successful query proves absence.
+
+        The installed Jellyfin rejects GET /Items/{id} with HTTP400. The supported
+        collection query works without a user ID and preserves error semantics.
         """
-        Get a library item by ID (for verification).
-
-        Args:
-            item_id: Jellyfin item ID
-
-        Returns:
-            Item data dict if found, None if not found
-        """
-        try:
-            client = await self._get_client()
-            response = await client.get(f"/Items/{item_id}")
-
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 404:
-                return None
-            else:
-                logger.warning(f"Unexpected status getting item {item_id}: {response.status_code}")
-                return None
-
-        except Exception as e:
-            logger.error(f"Error getting Jellyfin item: {e}")
+        client = await self._get_client()
+        response = await client.get("/Items", params={
+            "Ids": item_id, "Fields": "Path,ProviderIds,MediaSources",
+        })
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict) or not isinstance(data.get("Items"), list):
+            raise ValueError("Invalid Jellyfin item query response")
+        items = data["Items"]
+        if not items:
             return None
+        if len(items) != 1 or items[0].get("Id", "").replace("-", "") != item_id.replace("-", ""):
+            raise ValueError("Jellyfin item query did not match the requested ID")
+        return items[0]
+
+    async def wait_for_item_removal(self, item_id: str, attempts: int = 10, delay: float = 1) -> bool:
+        """Bounded verification: an accepted scan is not proof of removal."""
+        import asyncio
+        for attempt in range(attempts):
+            if await self.get_item(item_id) is None:
+                return True
+            if attempt + 1 < attempts:
+                await asyncio.sleep(delay)
+        return False
 
     async def health_check(self) -> bool:
         """Check if Jellyfin is reachable."""
@@ -217,6 +222,72 @@ class JellyfinClient:
             return response.status_code == 200
         except Exception as e:
             logger.error(f"Jellyfin health check failed: {e}")
+            return False
+
+    async def library_scan_state(self) -> Optional[str]:
+        """Return Idle/Running/Cancelling, or None when status is unverified."""
+        try:
+            client = await self._get_client()
+            response = await client.get("/ScheduledTasks")
+            response.raise_for_status()
+            tasks = response.json()
+            matches = [t for t in tasks if isinstance(t, dict) and t.get("Key") == "RefreshLibrary"]
+            if len(matches) == 1 and matches[0].get("State") in {"Idle", "Running", "Cancelling"}:
+                return matches[0]["State"]
+        except Exception as exc:
+            logger.warning("Library scan status unavailable (%s)", type(exc).__name__)
+        return None
+
+    async def get_series_episodes(self, series_id: str) -> Optional[list[dict]]:
+        """Fetch playable-episode evidence; None means the lookup failed."""
+        try:
+            client = await self._get_client()
+            response = await client.get(f"/Shows/{series_id}/Episodes", params={"Fields": "Path,MediaSources"})
+            response.raise_for_status()
+            items = response.json().get("Items")
+            return items if isinstance(items, list) else None
+        except Exception as exc:
+            logger.warning("Episode lookup unavailable (%s)", type(exc).__name__)
+            return None
+
+    async def clear_shoko_discovery_cache(self) -> bool:
+        """Clear only Shokofin's memory caches, with no scans running.
+
+        Installed Shokofin ClearPluginCacheTask clears API/VFS lookup caches;
+        it does not remove media or VFS entries. Confirm task completion before
+        starting a library scan. Unknown task state fails closed.
+        """
+        import asyncio
+        try:
+            client = await self._get_client()
+            response = await client.get("/ScheduledTasks")
+            response.raise_for_status()
+            tasks = response.json()
+            if any(t.get("State") != "Idle" for t in tasks if t.get("Key") in
+                   {"RefreshLibrary", "ShokoAutoRefreshMetadata", "ShokoClearPluginCache"}):
+                return False
+            matches = [t for t in tasks if t.get("Key") == "ShokoClearPluginCache"]
+            scans = [t for t in tasks if t.get("Key") == "RefreshLibrary"]
+            if len(matches) != 1 or len(scans) != 1 or not matches[0].get("Id"):
+                return False
+            task = matches[0]
+            previous_end = (task.get("LastExecutionResult") or {}).get("EndTimeUtc")
+            response = await client.post(f"/ScheduledTasks/Running/{task['Id']}")
+            if response.status_code not in (200, 204):
+                return False
+            for _ in range(10):
+                await asyncio.sleep(0.2)
+                response = await client.get("/ScheduledTasks")
+                response.raise_for_status()
+                current = [t for t in response.json() if t.get("Id") == task["Id"]]
+                if len(current) != 1:
+                    return False
+                result = current[0].get("LastExecutionResult") or {}
+                if current[0].get("State") == "Idle" and result.get("EndTimeUtc") != previous_end:
+                    return result.get("Status") == "Completed"
+            return False
+        except Exception as exc:
+            logger.warning("Shokofin cache refresh unavailable (%s)", type(exc).__name__)
             return False
 
     async def trigger_library_scan(self) -> bool:

@@ -14,7 +14,6 @@ async def test_unverified_fallback_preserves_observed_stage(db_session,monkeypat
                      updated_at=datetime.utcnow()-timedelta(hours=1))
     db_session.add(row);await db_session.commit()
     monkeypatch.setattr(verifier,'verify_request',AsyncMock(return_value=False))
-    monkeypatch.setattr(verifier,'_check_and_rebuild_vfs_if_needed',AsyncMock())
     monkeypatch.setattr(verifier.settings,'ENABLE_SHOKO',False)
     assert await verifier.check_stuck_requests_fallback(db_session)==[]
     assert row.state==state
@@ -29,7 +28,6 @@ async def test_fallback_still_recovers_confirmed_availability(db_session,monkeyp
         request.state=RequestState.AVAILABLE
         return True
     monkeypatch.setattr(verifier,'verify_request',verified)
-    monkeypatch.setattr(verifier,'_check_and_rebuild_vfs_if_needed',AsyncMock())
     monkeypatch.setattr(verifier.settings,'ENABLE_SHOKO',False)
     broadcast=AsyncMock();monkeypatch.setattr(verifier.broadcaster,'broadcast_update',broadcast)
     assert await verifier.check_stuck_requests_fallback(db_session)==[row]

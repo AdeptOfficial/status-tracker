@@ -10,6 +10,7 @@
 #   1. Create external network: docker network create media-net
 #   2. Add networks section to media stack docker-compose.yml
 #   3. Restart media stack to join the network
+#   4. Before enabling deletion, follow docs/MEDIA-PERMISSIONS.md
 #
 # Related docs:
 #   - Feature request: ideas/features/request-status-dashboard.md

@@ -14,7 +14,7 @@ The challenge: Different services use different IDs.
 import logging
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from app.models import MediaRequest, RequestState
 
@@ -99,37 +99,33 @@ class EventCorrelator:
         return result.scalar_one_or_none()
 
     async def find_by_any(
-        self,
-        db: "AsyncSession",
-        tmdb_id: Optional[int] = None,
-        tvdb_id: Optional[int] = None,
-        jellyseerr_id: Optional[int] = None,
-        qbit_hash: Optional[str] = None,
+        self, db: "AsyncSession", tmdb_id: Optional[int] = None,
+        tvdb_id: Optional[int] = None, jellyseerr_id: Optional[int] = None,
+        qbit_hash: Optional[str] = None, season: Optional[int] = None,
     ) -> Optional[MediaRequest]:
-        """
-        Find request using any available correlation ID.
-        Tries IDs in order of specificity: hash > jellyseerr > tmdb > tvdb.
-        """
+        """Prefer exact IDs; require season identity for ambiguous TV requests."""
+        from app.models import MediaType
+        filters = []
         if qbit_hash:
-            request = await self.find_by_hash(db, qbit_hash)
-            if request:
-                return request
-
+            filters.append(MediaRequest.qbit_hash.ilike(qbit_hash))
         if jellyseerr_id:
-            request = await self.find_by_jellyseerr_id(db, jellyseerr_id)
-            if request:
-                return request
-
+            filters.append(MediaRequest.jellyseerr_id == jellyseerr_id)
         if tmdb_id:
-            request = await self.find_by_tmdb(db, tmdb_id)
-            if request:
-                return request
-
+            filters.append(MediaRequest.tmdb_id == tmdb_id)
         if tvdb_id:
-            request = await self.find_by_tvdb(db, tvdb_id)
-            if request:
-                return request
-
+            filters.append(MediaRequest.tvdb_id == tvdb_id)
+        for condition in filters:
+            stmt = select(MediaRequest).where(condition,
+                MediaRequest.state.in_(ACTIVE_STATES + ([RequestState.AVAILABLE] if jellyseerr_id else [])))
+            if season is not None:
+                stmt = stmt.where(MediaRequest.media_type == MediaType.TV, or_(MediaRequest.season == season, MediaRequest.season.is_(None)))
+            rows = list((await db.scalars(stmt)).all())
+            if len(rows) == 1:
+                return rows[0]
+            # Never select an arbitrary season when provider IDs are shared.
+            if len(rows) > 1:
+                logger.warning("Ambiguous request correlation; season=%s", season)
+                return None
         return None
 
     async def find_active_downloads(

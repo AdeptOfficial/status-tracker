@@ -44,7 +44,9 @@ from app.services.auth import (
     AUTH_COOKIE_NAME,
 )
 from app.clients.jellyfin import jellyfin_client
-from app.services.deletion_orchestrator import delete_request as do_delete_request
+from app.services.deletion_orchestrator import (
+    delete_request as do_delete_request, DeletionOrchestrator, UnsafeDeletionError,
+)
 from app.services.jellyfin_verifier import verify_request
 from app.clients.radarr import radarr_client
 
@@ -499,15 +501,21 @@ async def delete_request(
 
     This will:
     1. Create a DeletionLog entry (audit trail)
-    2. Hard delete the request from the database
+    2. Validate scope (TV synchronization is blocked until season-safe)
     3. Delete from Sonarr/Radarr (if delete_files=true, deletes files from disk)
     4. Remove from Jellyfin library
     5. Remove from Jellyseerr
     6. Trigger Shoko rescan (for anime)
 
-    The request will be completely removed from status-tracker.
+    The request is removed only after all service operations succeed.
+    Failed requests are retained with an incomplete deletion audit.
     If the same media is requested again later, it will be a new request.
     """
+    try:
+        await DeletionOrchestrator(db).validate_scope(request_id)
+    except UnsafeDeletionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     deletion_log = await do_delete_request(
         db=db,
         request_id=request_id,
@@ -542,6 +550,13 @@ async def bulk_delete_requests(
     Returns list of DeletionLog entries for each successfully deleted request.
     Requests that are not found are silently skipped.
     """
+    # Validate the entire selection before deleting even the first item.
+    try:
+        for request_id in payload.request_ids:
+            await DeletionOrchestrator(db).validate_scope(request_id)
+    except UnsafeDeletionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     results = []
 
     for request_id in payload.request_ids:

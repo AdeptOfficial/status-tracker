@@ -3,15 +3,16 @@ Deletion orchestrator service.
 
 Coordinates deletion of media across all services:
 1. Creates DeletionLog entry (audit trail)
-2. Hard deletes request from DB
+2. Validates deletion scope before any mutation
 3. Syncs deletion to external services (Sonarr/Radarr, Shoko, Jellyfin, Jellyseerr)
-4. Tracks progress via DeletionSyncEvents
+4. Retains failed requests and tracks progress via DeletionSyncEvents
 5. Broadcasts SSE updates for real-time UI
 """
 
 import asyncio
 import logging
 import re
+from pathlib import PurePosixPath
 from datetime import datetime
 from typing import Optional
 
@@ -69,6 +70,17 @@ def get_username_for_source(
         return "System"
 
 
+class UnsafeDeletionError(ValueError):
+    """The available service operations cannot preserve the requested scope."""
+
+
+TV_DELETION_BLOCKED = (
+    "TV deletion is temporarily unavailable: service deletion currently affects the "
+    "whole show, including sibling seasons. No changes were made. Season-safe "
+    "deletion and explicit whole-show confirmation are required first."
+)
+
+
 class DeletionOrchestrator:
     """
     Orchestrates media deletion across all services.
@@ -86,6 +98,13 @@ class DeletionOrchestrator:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def validate_scope(self, request_id: int):
+        """Fail before audit/DB/API writes, including bulk and webhook callers."""
+        request = await self._get_request(request_id)
+        if request and settings.ENABLE_DELETION_SYNC and request.media_type == MediaType.TV:
+            raise UnsafeDeletionError(TV_DELETION_BLOCKED)
+        return request
 
     async def delete_request(
         self,
@@ -113,7 +132,7 @@ class DeletionOrchestrator:
         skip_services = skip_services or []
 
         # Phase 1: Get request and create deletion log
-        request = await self._get_request(request_id)
+        request = await self.validate_scope(request_id)
         if not request:
             logger.warning(f"Request {request_id} not found for deletion")
             return None
@@ -172,17 +191,13 @@ class DeletionOrchestrator:
         # Broadcast deletion started (only services being synced)
         await self._broadcast_deletion_started(deletion_log, services_to_sync)
 
-        # Phase 2: Hard delete request from DB
-        await self.db.delete(request)
-        await self.db.commit()
-        logger.info(f"Deleted request {request_id} from database")
-
         # Phase 3: Sync to external services (async)
         if settings.ENABLE_DELETION_SYNC:
             await self._sync_external_services(
                 deletion_log=deletion_log,
                 services=services_to_sync,
                 delete_files=delete_files,
+                request=request,
             )
         else:
             logger.info("Deletion sync disabled, skipping external services")
@@ -196,6 +211,11 @@ class DeletionOrchestrator:
                 )
             # Calculate final status
             await self._update_deletion_status(deletion_log)
+
+        # Keep the request visible if any service failed; retries retain identity.
+        if deletion_log.status == DeletionStatus.COMPLETE:
+            await self.db.delete(request)
+            await self.db.commit()
 
         # Broadcast final status
         await self._broadcast_deletion_completed(deletion_log)
@@ -337,8 +357,26 @@ class DeletionOrchestrator:
         deletion_log: DeletionLog,
         services: list[str],
         delete_files: bool,
+        request: MediaRequest,
     ):
         """Sync deletion to external services."""
+        # External/record-less movie deletions need the same disk proof as dashboard deletions.
+        if delete_files and request.media_type == MediaType.MOVIE and "radarr" not in services:
+            try:
+                path = request.deletion_movie_path
+                if not path and request.final_path:
+                    path = str(PurePosixPath(request.final_path).parent)
+                if not path or await radarr_client.folder_video_files(path):
+                    raise ValueError("Movie file absence is unverified")
+            except Exception:
+                await self._add_sync_event(deletion_log, "radarr", ServiceSyncStatus.FAILED,
+                                           error_message="Cannot verify file removal for external deletion; request retained")
+                for service in services:
+                    await self._add_sync_event(deletion_log, service, ServiceSyncStatus.SKIPPED,
+                                               details="Skipped because movie file removal is unverified")
+                await self._check_completion(deletion_log)
+                return
+
         # Order: Sonarr/Radarr first (deletes files), then Shoko, Jellyfin, Jellyseerr
         ordered_services = []
         if "sonarr" in services:
@@ -352,9 +390,18 @@ class DeletionOrchestrator:
         if "jellyseerr" in services:
             ordered_services.append("jellyseerr")
 
-        for service in ordered_services:
-            await self._sync_service(deletion_log, service, delete_files)
+        for index, service in enumerate(ordered_services):
+            success = await self._sync_service(deletion_log, service, delete_files, request)
             await self._broadcast_deletion_progress(deletion_log, service)
+            if success is False:
+                # Do not clear downstream availability after an upstream failure.
+                for remaining in ordered_services[index + 1:]:
+                    await self._add_sync_event(
+                        deletion_log, remaining, ServiceSyncStatus.SKIPPED,
+                        details=f"Not attempted because {service} failed; request retained",
+                    )
+                await self.db.commit()
+                break
 
         # Check if all done
         await self._check_completion(deletion_log)
@@ -364,6 +411,7 @@ class DeletionOrchestrator:
         deletion_log: DeletionLog,
         service: str,
         delete_files: bool,
+        request: MediaRequest,
     ):
         """Sync deletion to a single service."""
         # Mark as acknowledged
@@ -384,8 +432,19 @@ class DeletionOrchestrator:
                     deletion_log.sonarr_id, delete_files=delete_files
                 )
             elif service == "radarr" and deletion_log.radarr_id:
+                # Persist the directory before removing any Radarr files/records.
+                movie = await radarr_client.get_movie_strict(deletion_log.radarr_id)
+                if movie:
+                    if movie.get("tmdbId") != deletion_log.tmdb_id:
+                        raise ValueError("Radarr movie identity changed")
+                    path = movie.get("path")
+                    if request.deletion_movie_path and path != request.deletion_movie_path:
+                        raise ValueError("Radarr movie directory changed")
+                    request.deletion_movie_path = path
+                    await self.db.commit()
                 success, message = await radarr_client.delete_movie(
-                    deletion_log.radarr_id, delete_files=delete_files
+                    deletion_log.radarr_id, delete_files=delete_files,
+                    movie_path=request.deletion_movie_path, tmdb_id=deletion_log.tmdb_id,
                 )
             elif service == "shoko" and deletion_log.is_anime:
                 if delete_files:
@@ -404,9 +463,10 @@ class DeletionOrchestrator:
             elif service == "jellyfin" and deletion_log.jellyfin_id:
                 if delete_files:
                     # Files being deleted - trigger scan so Jellyfin removes entry
-                    success, message = await jellyfin_client.delete_item(
-                        deletion_log.jellyfin_id
-                    )
+                    success, message = await jellyfin_client.delete_item(deletion_log.jellyfin_id)
+                    if success:
+                        success = await jellyfin_client.wait_for_item_removal(deletion_log.jellyfin_id)
+                        message = "Library item absence verified" if success else "Library item still present after scan; retry after library refresh completes"
                 else:
                     # Files kept on disk - skip Jellyfin (nothing to remove)
                     await self._add_sync_event(
@@ -438,14 +498,22 @@ class DeletionOrchestrator:
                 media_id = await jellyseerr_client.get_media_id_by_tmdb(
                     deletion_log.tmdb_id, media_type_str
                 )
-                if media_id:
+                if not req_success:
+                    media_success = False
+                    messages.append("Media unchanged because request removal failed")
+                elif media_id and delete_files:
                     media_success, media_msg = await jellyseerr_client.delete_media(media_id)
                     messages.append(f"Media: {media_msg}")
                 else:
                     media_success = True
-                    messages.append("Media: No entry found (already cleared)")
+                    messages.append("Media: Availability retained" if not delete_files else "Media: No entry found (already cleared)")
 
                 success = req_success and media_success
+                if success and deletion_log.jellyseerr_id:
+                    success = await jellyseerr_client.verify_request_removed(deletion_log.jellyseerr_id)
+                if success and delete_files:
+                    success = await jellyseerr_client.get_media_id_by_tmdb(deletion_log.tmdb_id, media_type_str) is None
+                messages.append("Removal verified" if success else "Removal not verified; tracker request retained")
                 message = "; ".join(messages)
             else:
                 success = True
@@ -473,6 +541,7 @@ class DeletionOrchestrator:
             )
 
         await self.db.commit()
+        return success
 
     async def _check_completion(self, deletion_log: DeletionLog):
         """Check if all services are done and update status."""
@@ -589,6 +658,8 @@ class DeletionOrchestrator:
         year = request.year or extract_year_from_title(request.title)
 
         return {
+            "deletion_allowed": not (settings.ENABLE_DELETION_SYNC and request.media_type == MediaType.TV),
+            "blocked_reason": TV_DELETION_BLOCKED if settings.ENABLE_DELETION_SYNC and request.media_type == MediaType.TV else None,
             "request_id": request.id,
             "title": request.title,
             "media_type": request.media_type.value,

@@ -680,6 +680,51 @@ class ShokoHttpClient:
             logger.error(f"Shoko get series episodes error: {e}")
             return []
 
+    async def confirmed_file_for_path(self, final_path: str) -> Optional[int]:
+        """Recover a missed match event using an unambiguous full-path suffix.
+
+        Never treat an ID, elapsed time, or an unassociated file as proof of a match.
+        PathEndsWith includes SeriesIDs/EpisodeIDs in the installed v3 API.
+        """
+        if not self.api_key or not final_path:
+            return None
+        path = final_path.replace("\\", "/").strip("/")
+        if "/" not in path:
+            return None
+        try:
+            response = await self._client.get(
+                f"{self.base_url}/api/v3/File/PathEndsWith",
+                headers=self._headers(),
+                params={"path": path.rsplit("/", 1)[-1], "includeXRefs": "true"},
+            )
+            response.raise_for_status()
+            data = response.json()
+            if not isinstance(data, list):
+                return None
+            matches = []
+            for file in data:
+                locations = file.get("Locations", [])
+                exact = any(
+                    loc.get("IsAccessible") is True
+                    and "/" in loc.get("RelativePath", "").replace("\\", "/").strip("/")
+                    and ("/" + path).endswith("/" + loc["RelativePath"].replace("\\", "/").strip("/"))
+                    for loc in locations
+                )
+                if exact:
+                    matches.append(file)
+            if len(matches) != 1:
+                return None
+            file = matches[0]
+            associated = any(
+                any(isinstance(ep.get("ID"), int) and ep["ID"] > 0 for ep in series.get("EpisodeIDs", []))
+                for series in file.get("SeriesIDs", [])
+            )
+            if associated and isinstance(file.get("ID"), int) and file["ID"] > 0:
+                return file["ID"]
+        except Exception as exc:
+            logger.warning("Shoko match recovery unavailable (%s)", type(exc).__name__)
+        return None
+
     async def get_file_info(self, file_id: int) -> Optional[dict]:
         """Get file info including path and size."""
         if not self.api_key:

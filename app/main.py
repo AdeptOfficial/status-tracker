@@ -188,6 +188,8 @@ async def jellyfin_fallback_loop():
         try:
             async with async_session() as db:
                 transitioned = await check_anime_matching_fallback(db)
+                from app.services.library_refresh import process_refresh_queue
+                await process_refresh_queue(db)
                 if transitioned:
                     await db.commit()
                     logger.info(f"Fallback checker transitioned {len(transitioned)} requests")
