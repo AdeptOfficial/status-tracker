@@ -14,7 +14,7 @@ not prove that those services can remove files.
 | Sonarr | The same filesystem access for TV imports. TV deletion in this tracker is currently blocked until season scope is implemented. |
 | Download client | Create downloads that Radarr/Sonarr can read and import. Shared groups/creation modes must work across all writers. |
 | Jellyfin | Read video files and traverse library directories. A read-only media mount is supported; deletion happens through Radarr, followed by library verification. |
-| Shoko (anime) | Read/traverse configured import paths. Verify separately before enabling anime cleanup; the live movie deletion test below was not an anime test. |
+| Shoko (anime) | Read/traverse configured import paths. Two anime-movie bulk deletions now passed file/location cleanup; TV cleanup remains unverified. |
 | Jellyseerr | Reach its APIs for request and availability management. It does not need filesystem access from Status Tracker. |
 
 Deleting a file usually depends on permissions on its **containing directory**.
@@ -65,6 +65,17 @@ If the intended group is already correct, a targeted `chmod g+w` on a containing
 directory may be sufficient. Do not use `chmod -R 777` or recursively change all
 media ownership as a setup step. Keep credentials and app configuration directories
 outside broad media permission changes.
+
+## What the requester needs to do
+
+After an operator has configured the media roots and service permissions, users
+only submit requests through Jellyseerr. Radarr/Sonarr create the per-title folders
+when importing; users should not need to create a folder or run chmod for every
+request. For a fresh-folder acceptance test, choose media not already in the
+library and let automatic search/import run. The operator verifies the folder was
+absent before import, then inspects actual creation modes, writer operations and
+Jellyfin readability. Do not pre-create the folder or repair its mode before
+measuring it, because that would hide the creation-policy behavior under test.
 
 ## Run a disposable preflight
 
@@ -151,10 +162,24 @@ for a different UID sharing the directory group; existing sentinel data remained
 untouched and temporary probes were removed. Root probes were rejected. A second
 isolated test confirmed setgid group inheritance,2775 directories/0664 files with
 umask002, and cross-user rename/deletion by UID911 and UID1000 sharing GID1000.
-This validates the Linux directory policy; real application creation modes remain
-a separate deployment check.
+This validates the isolated shared-group policy; actual DEV creation modes were
+subsequently measured in the separate fresh request below.
 
-Before a production release: verify fresh-import creation modes; test intentional
-re-request/import; implement TV scope; validate anime cleanup; and repeat through
+Subsequent DEV checks: Interstellar re-request/import reached Available; existing
+folder reused. User bulk-deleted two old anime movies after scoped0755→0775 repair
+on anime/movies parent and their two directories. Audits71/72 and actual file,
+library/provider/Shoko absence verified;21.84GiB reclaimed,27.61GiB free.
+
+Fresh Spider-Man request24 then passed unattended selection through Available in
+all services. Target folder absent before import, created at18:48:22 UTC as
+911:911/0755; file911:911/0644, hardlink count2. Actual Radarr identity remained
+911:911 with groups911/1000, umask0022. Disposable create/rename/delete as911:1000
+passed with cleanup; Jellyfin read/media probe passed. No manual folder/permission
+repair. These modes support the current owner-writer and reader roles; they do
+**not** grant group write to arbitrary other UIDs or implement2775/umask002. If
+additional writers are required, validate their chosen policy separately.
+
+Before a production release: implement TV scope; validate anime TV cleanup and
+regular TV; obtain user playback evidence and repeat through
 the supported proxy/device paths. Obtain the deployment owner's approval for
 production. DEV success does not constitute a production release.

@@ -220,6 +220,11 @@ async def verify_anime_tv(request: MediaRequest, db: "AsyncSession") -> bool:
 
     Similar to anime movie, but for TV series.
     """
+    episodes = [ep for ep in request.episodes
+                if request.season is None or ep.season_number == request.season]
+    if settings.ENABLE_SHOKO and any(ep.final_path for ep in episodes):
+        return await _verify_anime_imported_files(request, episodes, db)
+
     # Try 1: Series by TVDB (preferred)
     if request.tvdb_id:
         item = await jellyfin_client.find_item_by_tvdb(request.tvdb_id, "Series")
@@ -259,6 +264,47 @@ async def verify_anime_tv(request: MediaRequest, db: "AsyncSession") -> bool:
 # =============================================================================
 
 
+async def _verify_anime_imported_files(request, episodes, db) -> bool:
+    """Match imported paths to confirmed Shoko files, then exact Jellyfin files.
+
+    A split sequel can be S02 in Sonarr and S01 in Jellyfin. The file identity
+    proves the correspondence; shared series IDs or episode ordinals do not.
+    Ambiguous duplicate/multi-episode files require separate handling, not guessing.
+    """
+    from app.clients.shoko import shoko_http_client
+    if not episodes or any(not ep.final_path for ep in episodes):
+        return False
+    file_ids = []
+    for ep in episodes:
+        file_id = await shoko_http_client.confirmed_file_for_path(ep.final_path)
+        if not file_id:
+            return False
+        file_ids.append(file_id)
+    if len(set(file_ids)) != len(file_ids):
+        return False
+    found = await jellyfin_client.find_episodes_by_shoko_files(set(file_ids))
+    if found is None:
+        return False
+    by_file = {}
+    for entry in found:
+        if not is_playable(entry) or not entry.get("Id") or not entry.get("SeriesId"):
+            continue
+        file_id = str(entry.get("ProviderIds", {}).get("Shoko File"))
+        by_file.setdefault(file_id, {})[entry["Id"]] = entry
+    matches = {}
+    for ep, file_id in zip(episodes, file_ids):
+        candidates = list(by_file.get(str(file_id), {}).values())
+        if len(candidates) > 1:
+            return False
+        if candidates:
+            matches[(ep.season_number, ep.episode_number)] = candidates[0]
+    series_ids = {entry["SeriesId"] for entry in matches.values()}
+    if len(series_ids) != 1:
+        return False
+    return await _mark_tv_available(request, {"Id": series_ids.pop()}, db,
+                                    "anime-imported-file", episode_matches=matches)
+
+
 async def _mark_movie_available(
     request: MediaRequest, item: dict, db: "AsyncSession", verification_type: str
 ) -> bool:
@@ -288,7 +334,8 @@ async def _mark_movie_available(
 
 
 async def _mark_tv_available(
-    request: MediaRequest, item: dict, db: "AsyncSession", verification_type: str
+    request: MediaRequest, item: dict, db: "AsyncSession", verification_type: str,
+    episode_matches: Optional[dict] = None,
 ) -> bool:
     """Require individual playable episodes, not merely a series directory."""
     from app.models import EpisodeState
@@ -297,19 +344,22 @@ async def _mark_tv_available(
                 if request.season is None or ep.season_number == request.season]
     if not episodes or not item.get("Id"):
         return False
-    found = await jellyfin_client.get_series_episodes(item["Id"])
-    if found is None:
-        return False
-    playable = {}
-    for entry in found:
-        if is_playable(entry) and entry.get("Id"):
-            season, number = entry.get("ParentIndexNumber"), entry.get("IndexNumber")
-            if isinstance(season, int) and isinstance(number, int):
-                end = entry.get("IndexNumberEnd") or number
-                if not isinstance(end, int) or end < number or end - number > 100:
-                    continue
-                for n in range(number, end + 1):
-                    playable[(season, n)] = entry
+    if episode_matches is None:
+        found = await jellyfin_client.get_series_episodes(item["Id"])
+        if found is None:
+            return False
+        playable = {}
+        for entry in found:
+            if is_playable(entry) and entry.get("Id"):
+                season, number = entry.get("ParentIndexNumber"), entry.get("IndexNumber")
+                if isinstance(season, int) and isinstance(number, int):
+                    end = entry.get("IndexNumberEnd") or number
+                    if not isinstance(end, int) or end < number or end - number > 100:
+                        continue
+                    for n in range(number, end + 1):
+                        playable[(season, n)] = entry
+    else:
+        playable = episode_matches
     changed = False
     for episode in episodes:
         entry = playable.get((episode.season_number, episode.episode_number))
@@ -318,7 +368,9 @@ async def _mark_tv_available(
             episode.state = EpisodeState.AVAILABLE
             episode.jellyfin_id = entry["Id"]
     request.jellyfin_id = item["Id"]
-    if len(episodes) < (request.total_episodes or 0) or not all(ep.state == EpisodeState.AVAILABLE for ep in episodes):
+    if (len(episodes) < (request.total_episodes or 0)
+            or any((ep.season_number, ep.episode_number) not in playable for ep in episodes)
+            or not all(ep.state == EpisodeState.AVAILABLE for ep in episodes)):
         if changed:
             await db.commit()
             await broadcaster.broadcast_update(request)

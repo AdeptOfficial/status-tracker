@@ -1,27 +1,52 @@
 # Current validation — 2026-10-20
 
-226 isolated regressions pass, including the exact deployed runtime image.
-Permanent Firefox acceptance passes live updates/reconnect, season navigation,
-local timestamps, History filters and responsive layouts. DEV Cyberpunk S1
-completed automatic discovery with10/10 Ready; all ten video paths were read
-inside Jellyfin, and the user confirmed S1E1 playback. S2 remains Approved.
+240 isolated regressions pass. Full Firefox acceptance covers live updates,
+reconnection, seasons, History filters, bulk result retention and responsive
+layouts. Current DEV image `status-tracker:split-files-20261020`; runtime/source
+hashes match. S1 and S2 each show10/10 Ready; S2 uses exact imported Shoko file
+identities across a separate Jellyfin sequel numbered S1. All ten S2 VFS reads
+pass; S1E1 user playback was confirmed earlier, S2 user playback is unverified.
 
 Run `./run_tests.sh -q --disable-warnings`, then `./run_browser_tests.sh`.
 The suites use synthetic data; never mount server secrets or live databases.
 The runtime-image and live checks are recorded in the diary. Existing warnings
-remain. S2 import, regular-media request flows, a fresh re-request, TV/anime
-removal and physical-device/proxy coverage remain separate validation work.
+remain. Regular-TV flows,
+season-safe TV removal and physical-device/proxy coverage remain separate validation work.
 
 Movie deletion now has a separate live pass: Interstellar audit70 verified actual
 file and library absence, cleared service records and preserved all other tracker
 states. Old failed audit69 remains in history. A new request/download was not
-submitted. See [permission setup and evidence](MEDIA-PERMISSIONS.md).
+submitted during that deletion test. A subsequent fresh request23 was received,
+initially blocked by unrelated Nyaa search results. Added Knaben/movie coverage
+and aligned direct Prowlarr/helper egress. A manually selected approved4.21GiB
+release then completed automatic download/import/Jellyfin discovery/Available.
+File hardlinked and readable; ffprobe passes. No manual scan or status mutation.
+Live movie-detail Firefox/SSE/five viewport checks pass. User playback and actual
+fresh-directory modes were not tested by Interstellar (existing0775 folder reused).
+Interstellar Jellyseerr request/media now both Available (status5,16:30:08 UTC).
+Jellyseerr S2 mapping now passes normal scan and refresh/repeat scan using a
+separate DEV Seerr overlay with10 compiled-scanner tests. Tracker22 reached Available automatically at
+16:50:36 UTC with source-file verification and correct Watch link.
+See [permission setup and evidence](MEDIA-PERMISSIONS.md).
 The disposable preflight was tested for denied access, shared-group success,
 root rejection, existing-file preservation and cleanup, then passed on DEV.
 A separate isolated cross-writer test verified setgid/umask002 inheritance and
 rename/deletion between UID911 and UID1000 in shared GID1000.
-Current image `status-tracker:verified-delete-20261020`; nullable retry-path
+Current image `status-tracker:split-files-20261020`; nullable retry-path
 migration and existing-data persistence are covered.
+
+User bulk UI test deleted old anime movies2/4 (audits71/72 Complete). Independent
+file/Radarr/Jellyfin/Jellyseerr/Shoko absence checks pass. Other requests and test
+media preserved;21.84GiB reclaimed,27.61GiB free. This covers anime movies, not
+season-safe TV deletion. UI fixture never calls real deletion services.
+
+Fresh Spider-Man request24 subsequently passed unattended selection/download/import
+and automatic Available in tracker/Jellyfin/Jellyseerr. The folder was absent
+before import, then created911:911/0755; file0644/nlink2. Actual Radarr writer
+probe, Jellyfin read/ffprobe and Ready/Watch/SSE/five viewports pass. No chmod,
+manual scan/status or release selection. Free12.80GiB; user playback unverified.
+This verifies the current roles, not cross-writer group inheritance. Observer
+result is verified; evidence in homeserver notes/2026-10-20-dev-fresh-folder-movie.json.
 
 The sections below are chronological evidence. Older counts, images and pending
 statements describe earlier builds and are superseded by this current summary.

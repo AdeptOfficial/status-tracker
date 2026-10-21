@@ -250,6 +250,40 @@ class JellyfinClient:
             logger.warning("Episode lookup unavailable (%s)", type(exc).__name__)
             return None
 
+    async def find_episodes_by_shoko_files(self, file_ids: set[int]) -> Optional[list[dict]]:
+        """Find exact imported-file evidence across split Shokofin series.
+
+        Never guess a sequel from its title or a reused show provider ID. Bound
+        pagination; failed/incomplete inventory is not evidence of availability.
+        """
+        try:
+            client = await self._get_client()
+            found = []
+            wanted = {str(x) for x in file_ids}
+            for page in range(50):
+                response = await client.get("/Items", params={
+                    "Recursive": "true", "IncludeItemTypes": "Episode",
+                    "Fields": "Path,MediaSources,ProviderIds", "StartIndex": page * 200,
+                    "Limit": 200,
+                })
+                response.raise_for_status()
+                data = response.json()
+                items = data.get("Items")
+                total = data.get("TotalRecordCount")
+                if not isinstance(items, list) or not isinstance(total, int):
+                    return None
+                for item in items:
+                    provider = item.get("ProviderIds", {}).get("Shoko File")
+                    if str(provider) in wanted:
+                        found.append(item)
+                if (page + 1) * 200 >= total:
+                    return found
+                if not items:
+                    return None
+        except Exception as exc:
+            logger.warning("Split-series episode inventory unavailable (%s)", type(exc).__name__)
+        return None
+
     async def clear_shoko_discovery_cache(self) -> bool:
         """Clear only Shokofin's memory caches, with no scans running.
 

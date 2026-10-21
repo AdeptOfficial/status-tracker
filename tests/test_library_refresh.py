@@ -175,7 +175,13 @@ async def test_missed_event_to_available_without_manual_scan(db_session,monkeypa
         {'Id':f'ep-{i}','ParentIndexNumber':1,'IndexNumber':i,'Path':f'/media/E{i}.mkv'} for i in (1,2)
     ]))
     monkeypatch.setattr(verifier.broadcaster,'broadcast_update',AsyncMock())
-    monkeypatch.setattr(recovery.shoko_http_client,'confirmed_file_for_path',AsyncMock(side_effect=[201,202]))
+    async def confirmed(path):
+        return 201 if path.endswith('E1.mkv') else 202
+    async def imported_files(ids):
+        return [{'Id':f'ep-{i}', 'SeriesId':'series', 'Path':f'/media/E{i}.mkv',
+                 'ProviderIds':{'Shoko File':str(200+i)}} for i in (1,2)] if scan.await_count else []
+    monkeypatch.setattr(recovery.shoko_http_client,'confirmed_file_for_path',confirmed)
+    monkeypatch.setattr(verifier.jellyfin_client,'find_episodes_by_shoko_files',imported_files)
     assert await verifier.check_stuck_requests_fallback(db_session)==[]
     assert r.state==RequestState.ANIME_MATCHING
     scan.assert_not_awaited()

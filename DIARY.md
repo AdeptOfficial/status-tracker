@@ -114,6 +114,215 @@ the existing 2026-01-25 records. All three carry "unverified against the current
 build". Added index-only `issues/README.md` and `features/README.md`; `CLAUDE.md`
 inbox step now says one new file per item. No source or runtime change.
 
+## 2026-10-20: Status Tracker consolidated handoff; user deferred further work
+
+Added .claude/memory/session-2026-10-20-status-tracker.md with final DEV evidence,
+240 tracker/10 scanner test distinctions, IDs,12.80GiB storage, permission limits,
+completed observer, source/worktree cautions, private rollback and release gates.
+Linked from domain/service/app entry points; roadmap order now matches agreed
+next call: season-safe TV deletion first, then regular TV, playback/device checks
+and production readiness. Current TV guard remains; no production/publication
+approval. Later tracker fixes remain uncommitted beyond5a34941; overlay203a69c
+local only. Preserve concurrent work and do not deploy stale HEAD. Documentation
+only: no new server access, tests, deployment, deletion, download or public content.
+
+## 2026-10-20: Fresh automatic movie/folder flow passed on DEV
+
+Amazing Spider-Man2 tracker24/Jellyseerr153/Radarr109 completed the unattended
+request test: auto-grab17:19:26, download18:47:08, import18:48:22, all-service
+Available observed18:50:54 UTC. Folder was confirmed absent before import, then
+created18:48:22 by Radarr911:911 with0755; hardlinked file15467520894bytes,0644,
+nlink2. Actual Radarr groups911/1000 and umask0022. Disposable create/rename/delete
+probe as911:1000 passed and cleaned up; Jellyfin read and ffprobe passed (8494.771s).
+Ready page, correct Watch link, SSE and five viewport widths passed. No manual
+release selection, scan/status write, mkdir/chmod repair or media deletion.
+
+Observer completed verified result under private
+/opt/backups/status-tracker-fresh-spiderman-20261020/. DEV free12.80GiB. Evidence
+notes/2026-10-20-dev-fresh-folder-movie.json. This proves required writer/reader
+access for these actual service identities, not group-write access for every
+other UID: new directories are911:911/0755, not a fleet2775/umask002 rollout.
+User playback remains unverified. App/scanner code and images unchanged; no new
+regression run needed for observation/docs. Updated permissions guide, roadmap,
+service notes and existing deferred content candidate. Next release work: regular
+TV coverage, season-safe TV deletion and device/playback checks. Production untouched.
+
+## 2026-10-20: Fresh automatic movie/folder validation running on DEV
+
+User requested The Amazing Spider-Man2: tracker24/Jellyseerr153/Radarr109/TMDB102382.
+Auto-approved17:19:12 UTC; Radarr grabbed at17:19:26; qBittorrent started17:19:37.
+No manual selection, profile override or permissions changes. Selected14.41GiB
+release fits DEV storage. Confirmed target movie folder absent before import,
+so this tests real creation rather than reuse. Actual Radarr UID/GID911, groups
+911/1000, umask0022. Live movie detail/SSE/five viewport checks pass.
+
+User does not need to create folders or change permissions. A bounded independent
+DEV observer at /opt/backups/status-tracker-fresh-spiderman-20261020/ polls every20s
+(max540 checks), records progress and, after import, verifies fresh folder/file
+modes, hardlinks, actual Jellyfin read/probe and disposable writer operations.
+It waits for tracker and Jellyseerr Available before writing a verified result.
+No live config/status/scan mutation or media deletion. Root-only reports include
+progress.json, file-verification.json, result.json; check them on follow-up.
+Latest17:26:27 UTC:16.97% downloading,25.02GiB free. Import/permissions/availability
+remain PENDING; do not mark roadmap passed from setup alone. Evidence:
+notes/2026-10-20-dev-fresh-folder-movie.json. Production untouched.
+
+## 2026-10-20: DEV Jellyseerr split-sequel availability repaired and verified
+
+Created app-owned `~/git/homeserver-apps/seerr-dev-patches/` with upstream scanner
+source/license, guarded TS/compiled overlay, build tools and isolated integration
+tests. DEV Seerr3.5.0 now applies AniDB season mapping for a single numbered S1
+only after mapped TVDB identity resolves to the same show and target season exists.
+Native multi-season/S2 and movies retain normal handling; conflicting mappings skip.
+Original regression reproduced;10 tests pass against the exact compiled artifact,
+network disabled/disposable DB. No full-project semantic typecheck claim. Final
+image changes only scanner TS/JS, no runtime dependencies or schema changes.
+
+Deployed only jellyseerr via canonical/live media Compose image
+`seerr-dev:anidb-season-20261020`. Drift guards, stopped-service private backup,
+quiet Compose validation and startup verification pass; all other container IDs
+unchanged. Supported full scan fulfilled request150 within6sec; both Cyberpunk
+seasons and Interstellar now Available. Targeted Jellyfin metadata refresh204 and
+repeat full scan passed; ten sequel VFS files readable. No manual status/DB edits,
+provider-ID edits or locks. Media identities preserved. Full scan also corrected
+Bocchi4→5: all12 S1 videos readable, empty future S2 remains unavailable; all other
+media statuses unchanged. Free27.44GiB after temporary archive cleanup. No media
+removed. Private rollback /opt/backups/seerr-before-anidb-season-20261020/ and
+image seerr-dev:before-anidb-season-20261020 retained. Do not restore old DB over
+later activity. Production untouched; no upstream submission/public release.
+
+Updated Jellyseerr guide, existing issue, tracker roadmap/history and deferred
+content candidate. Evidence notes/2026-10-20-dev-seerr-season-mapping-fix.json.
+Next release gates: unattended request into fresh folder/creation permissions,
+regular TV and season-safe TV deletion. Overlay needs review on upstream upgrade.
+
+## 2026-10-20: DEV split-sequel tracker fix verified; Jellyseerr scanner gap diagnosed
+
+Interstellar request152 synchronized normally to Available at16:30:08 UTC; no
+repair required. S2's ten imports were already in Jellyfin as separate Edgerunners
+II / Season1, while tracker22 checked original show / Season2 and exhausted its
+bounded discovery retries. Added exact imported-path→confirmed Shoko File→Jellyfin
+episode verification across split series. Reject missing/ambiguous/shared files,
+wrong series and stale readiness. Source IDs345–354 independently match ten
+readable VFS videos. DEV `status-tracker:split-files-20261020` reached Available
+10/10 automatically at16:50:36.520 UTC; actual sequel Watch link and S1 preserved.
+No manual scan/status write/retry reset.240 regressions and full Firefox suite
+pass; both live season pages/SSE/320–2048px layouts pass. Runtime source hashes
+verified. No dependency/schema changes. Private stopped-app backup
+/opt/backups/status-tracker-before-split-files-20261020/; rollback
+status-tracker:before-split-files-20261020. Do not restore old DB over later events.
+
+Jellyseerr3.5.0 request150/season2 remains unavailable: installed scanner only uses
+AniDB season mapping after TMDB/TVDB resolution fails. Duplicate parent IDs resolve
+the original show first, bypassing cached AniDB19445→TVDB384541 season2 mapping.
+Opened issues/bugs/dev-jellyseerr-split-anime-season-availability.md with durable
+repair/acceptance plan; no third-party scanner, metadata or availability mutation.
+Evidence notes/2026-10-20-dev-split-sequel-validation.json. Next: scanner mapping,
+fresh-folder/unattended request test and season-safe TV deletion. Production and
+public release untouched; existing deferred content candidate updated only.
+
+## 2026-10-20: DEV bulk movie deletion verified and feedback repaired
+
+User deleted old requests2 (5 Centimeters per Second) and4 (The Garden of Words)
+through authenticated bulk UI. Audits71/72 Complete. Independent checks confirm
+real files absent, both Radarr IDs404, no matching Jellyfin items, Jellyseerr
+requests404/media absent, Shoko file queries0 results, tracker rows removed.
+All unselected identities preserved; protected file counts Interstellar1,
+Cyberpunk20 and Demon Lord12. Recovered21.84GiB; DEV free27.61GiB. Anime movie
+cleanup now has two real passes; TV deletion remains blocked and unverified.
+
+User found success feedback vanished on refresh. DEV now runs UI-only image
+`status-tracker:bulk-feedback-20261020` on unchanged verified-delete backend.
+Accessible result banner survives refresh, reports selected/completed counts,
+links audits, supports dismissal, warns for partial/omitted/empty responses.
+Full Firefox acceptance passes these outcomes, reload and mobile widths using
+synthetic responses (no further real deletions). Original backend226-test baseline
+unchanged; not rerun for this template-only patch. Runtime/source hash and DEV
+served markup/health verified. First deploy smoke wrongly expected admin JS in
+an anonymous response; automatic rollback worked before corrected smoke/redeploy.
+Private backup /opt/backups/status-tracker-before-bulk-feedback-retry-20261020/;
+rollback image status-tracker:before-bulk-feedback-retry-20261020. No DB restore,
+credentials exposed, production changes or public announcement. Evidence:
+homeserver notes/2026-10-20-dev-bulk-delete.json. Existing content candidate updated.
+
+## 2026-10-20: DEV bulk UI deletion test prepared, not yet executed
+
+User offered to exercise mass deletion. Selected old movie requests2 (5 Centimeters
+per Second) and4 (The Garden of Words),21.84GiB actual files/nlink1. Both previews
+allow Radarr/Shoko/Jellyfin/Jellyseerr sync. Preserving20/21/22/23 and all TV.
+Scoped0755→0775 repair on anime/movies parent plus these two directories; owners
+unchanged. Owner-only DB/request/permission before-snapshot under
+/opt/backups/status-tracker-bulk-delete-20261020/ in DEV media LXC <media-dev>. User will
+click the actual bulk action in their authenticated browser; no admin credential
+collected or auth bypass. No media deleted yet. Verify audit/file/library/provider
+absence, Shoko cleanup, space recovery and protected files after click. Evidence:
+homeserver notes/2026-10-20-dev-bulk-delete.json. Production unchanged.
+
+## 2026-10-20: DEV movie re-request flow verified after indexer repair
+
+Knaben id10 added/tested on DEV, movies tag only; Radarr returned68 results with33
+approved. Prowlarr now uses internal-only byparr-direct with matching direct
+egress. Full1337x test passed/backoff cleared; qBittorrent remains on Gluetun VPN
+with OUTPUT DROP, existing containers unchanged. Existing Prowlarr key used only
+internally under explicit user authorization; no key or public IP displayed.
+Private rollback retained; infrastructure Compose/service guide updated.
+
+Interstellar tracker23/Jellyseerr152/Radarr108: selected a normal approved4.21GiB
+1080p release because preferred33.26GiB remux exceeded DEV capacity. This proves
+manual approved selection followed by automatic download/import/discovery, not
+fully unattended release selection. No profile/rejection override, manual scan or
+direct status update. Download complete16:24:20 UTC, import16:25:18, then Available.
+Actual file4515260620bytes, nlink2, UID911:GID911,0644, reused directory0775;
+read inside Jellyfin and ffprobe HEVC/audio duration10144.256sec passed. Free5.59GiB,
+no cleanup needed. User playback and fresh-directory creation remain unverified.
+Jellyseerr still reported media status3 at the final check; its availability-cache
+refresh is pending, so this does not prove every service cache is synchronized.
+Live Firefox movie detail, SSE and320/390/768/1440/2048px layouts passed. App image
+unchanged (`status-tracker:verified-delete-20261020`); previous226 runtime tests
+remain the code baseline. TV scope, anime cleanup and regular TV remain open.
+Evidence: homeserver notes/2026-10-20-dev-knaben-validation.json. Production and
+public release untouched; deferred content candidate updated without publishing.
+
+## 2026-10-20: DEV 1337x root-cause investigation and indexer recommendation
+
+1337x is enabled but in backoff until2026-10-21T04:10:39Z after repeated Cloudflare
+failures. Proxy/indexer tags match and Byparr is healthy. Verified outbound IPv4
+routes differ: Prowlarr follows the LXC's direct exit; Byparr uses VPN. No public
+IP values stored. Upstream requires matching solver/requester egress. A temporary
+same-network solver fetched actual1337x movie listings (200,35.9sec); existing
+solver also succeeded (200,54.8sec). Cookie replay through Prowlarr remains the
+untested failure boundary; do not claim the site is down or solver broken.
+Temporary helper removed; no live settings/Compose/VPN changes or downloads.
+
+Knaben public metadata API tested from DEV: HTTP200,20 Interstellar results with
+reported seeders. Recommended as an additional general source. Not added to
+Prowlarr, and Radarr integration/grab is untested. Updated existing Cloudflare
+issue with recovery plan and primary sources. Private TorrentLeech is optional
+if user has membership/invitation; no signup/purchase was made. Production untouched.
+Evidence: homeserver notes/2026-10-20-dev-indexer-investigation.json. Tracker23 remains pending
+matching movie search results; no forced grabs.
+
+## 2026-10-20: Fresh Interstellar re-request received; search blocked
+
+User submitted DEV Jellyseerr152, creating tracker23 at15:38:05 UTC with a new
+Radarr108 (TMDB157336, Interstellar2014, monitored, profile4). Tracker retained
+Approved; auto-approved timeline recorded. Radarr MoviesSearch742302 ran from
+15:38:05 to15:38:16 and completed without a grab. Queue/history empty; no matching
+qBittorrent download and no Jellyfin copy. Read-only interactive search returned
+13 results, all from Nyaa.si (Prowlarr), all rejected Unable to parse release.
+Samples were unrelated anime titles Interstellar Wanderer/Interstellar Journey,
+not the requested film. This is verified search coverage/content mismatch, not
+proof that quality settings are too strict or tracker state progression failed.
+No matching movie release was observed; no forced grab, setting change or scan.
+
+Existing empty Interstellar folder was reused (1000:1000,0775), so this test does
+not prove new-folder creation permissions. DEV free22.10GiB. Request23 remains
+Approved, download/import/readability/playback still pending. Next action is to
+restore usable general-movie search results in DEV, then observe normal flow.
+Existing issue2026-01-25-arr-releases-rejected.md updated with current evidence;
+its historical quality-profile hypothesis is unproven for this re-request.
+No code/deployment/production changes or media deletion in this check.
+
 ## 2026-10-20: Verified DEV movie deletion and operator permission guide
 
 Deployed `status-tracker:verified-delete-20261020` to media-dev LXC <media-dev>. Movie

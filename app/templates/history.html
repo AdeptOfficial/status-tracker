@@ -5,6 +5,15 @@
 {% block content %}
 <p class="motd">adept@lab:~$ cat requests.log<span class="cursor">▋</span></p>
 
+<div id="bulk-delete-result" class="card hidden" role="status" aria-live="polite" aria-atomic="true">
+    <p id="bulk-delete-result-message"></p>
+    <div class="modal-actions" style="flex-wrap: wrap;">
+        <a href="/deletion-logs" class="btn">View deletion logs</a>
+        <a href="" class="btn">Refresh list</a>
+        <button type="button" class="btn" onclick="dismissBulkDeleteResult()">Dismiss</button>
+    </div>
+</div>
+
 <!-- Header: filters + sync -->
 <div class="card-head" style="margin-bottom: 0; flex-wrap: wrap;">
     <span class="when">{{ total }} history item{% if total != 1 %}s{% endif %}{% if total > requests|length %} · showing latest {{ requests|length }}{% endif %}</span>
@@ -297,6 +306,33 @@
         document.getElementById('bulk-delete-loading').classList.add('hidden');
     }
 
+    const bulkDeleteResultKey = 'statusTracker.bulkDeleteResult';
+
+    function showBulkDeleteResult(result) {
+        if (!result || !Number.isInteger(result.total) || result.total < 1 ||
+            !Number.isInteger(result.completed) || result.completed < 0 || result.completed > result.total) return;
+        const complete = result.completed === result.total;
+        const banner = document.getElementById('bulk-delete-result');
+        banner.classList.toggle('warn', !complete);
+        document.getElementById('bulk-delete-result-message').textContent = complete
+            ? `Successfully deleted ${result.completed} of ${result.total} selected items.`
+            : `Confirmed deletion of ${result.completed} of ${result.total} selected items. Some deletions are incomplete or unconfirmed. Review the deletion logs before retrying.`;
+        banner.classList.remove('hidden');
+    }
+
+    function dismissBulkDeleteResult() {
+        document.getElementById('bulk-delete-result').classList.add('hidden');
+        try { sessionStorage.removeItem(bulkDeleteResultKey); } catch (_) {}
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        try {
+            const saved = sessionStorage.getItem(bulkDeleteResultKey);
+            sessionStorage.removeItem(bulkDeleteResultKey);
+            if (saved) showBulkDeleteResult(JSON.parse(saved));
+        } catch (_) {}
+    });
+
     async function confirmBulkDelete() {
         const deleteFiles = document.getElementById('bulk-delete-files').checked;
         const loading = document.getElementById('bulk-delete-loading');
@@ -324,16 +360,18 @@
 
             if (response.ok) {
                 const results = await response.json();
-                const completed = results.filter(result => result.status === 'complete').length;
+                const completed = Array.isArray(results)
+                    ? Math.min(total, results.filter(result => result.status === 'complete').length) : 0;
+                const summary = { completed, total };
                 progress.textContent = `${completed} / ${total} deleted`;
-                if (completed < results.length) {
-                    alert('Some deletions are incomplete. Failed requests were retained; review the deletion logs.');
-                }
-
-                // Refresh page after short delay
-                setTimeout(() => {
+                hideBulkDeleteModal();
+                showBulkDeleteResult(summary);
+                // Carry the result across the list refresh so success remains visible.
+                // If storage is unavailable, retain the banner and manual refresh link.
+                try {
+                    sessionStorage.setItem(bulkDeleteResultKey, JSON.stringify(summary));
                     window.location.reload();
-                }, 500);
+                } catch (_) {}
             } else if (response.status === 401) {
                 alert('Authentication required. Please log in with your Jellyfin account.');
                 hideBulkDeleteModal();

@@ -96,6 +96,38 @@ try{
   if(await evaluate(`document.documentElement.scrollWidth>innerWidth`))throw Error(`History overflow at ${width}`);
  }
  console.log('PASS History filters/counts/tab retention/empty state, admin sync repair and repeat sync, mobile layout');
+ // Use synthetic responses at the browser boundary; never delete real media.
+ await call('browsingContext.navigate',{context,url:origin+'/history?state=available',wait:'complete'});
+ for(const [statuses,expected] of [
+  [['complete','complete'],'Successfully deleted 2 of 2'],
+  [['complete','incomplete'],'Confirmed deletion of 1 of 2'],
+  [['complete'],'Confirmed deletion of 1 of 2'],
+  [[], 'Confirmed deletion of 0 of 2'],
+ ]) {
+  await evaluate(`(() => {
+   document.querySelectorAll('.item-checkbox').forEach(el=>{if(el.checked)el.click();});
+   const boxes=[...document.querySelectorAll('.item-checkbox')].slice(0,2);
+   if(boxes.length!==2)throw Error('Need two synthetic movies');
+   boxes.forEach(el=>el.click());
+   const original=window.fetch;
+   window.fetch=(url,options)=>url==='/api/requests/bulk-delete'
+    ? Promise.resolve(new Response(JSON.stringify(${JSON.stringify(statuses)}.map(status=>({status}))),{status:200,headers:{'Content-Type':'application/json'}}))
+    : original(url,options);
+   window.bulkFeedbackReloadMarker=true;
+   document.querySelector('#bulk-delete-btn').click();
+   document.querySelector('#bulk-delete-confirm-btn').click();
+  })()`);
+  await until(()=>evaluate(`!window.bulkFeedbackReloadMarker && !document.querySelector('#bulk-delete-result').classList.contains('hidden')`),'bulk result lost across reload');
+  if(!await evaluate(`document.querySelector('#bulk-delete-result-message').textContent.includes(${JSON.stringify(expected)})`))throw Error('Wrong bulk outcome');
+  if(!await evaluate(`document.querySelector('#bulk-delete-result a').getAttribute('href')==='/deletion-logs'`))throw Error('Missing audit link');
+  for(const width of [320,390,1440]) {
+   await call('browsingContext.setViewport',{context,viewport:{width,height:900}});
+   if(await evaluate('document.documentElement.scrollWidth>innerWidth'))throw Error('Bulk feedback overflow');
+  }
+  await evaluate('dismissBulkDeleteResult()');
+  if(!await evaluate(`document.querySelector('#bulk-delete-result').classList.contains('hidden')`))throw Error('Result not dismissed');
+ }
+ console.log('PASS bulk success, partial, omitted/empty results survive reload; audit link, dismissal and mobile layout');
  const shot=await call('browsingContext.captureScreenshot',{context});fs.writeFileSync(new URL('./result.png',import.meta.url),Buffer.from(shot.data,'base64'));
 }catch(e){console.error('FAIL',e.message); if(ws&&context)console.log('Overflow',await evaluate(`JSON.stringify([...document.querySelectorAll('body *')].filter(e=>e.getBoundingClientRect().right>innerWidth+1).map(e=>({tag:e.tagName,cls:e.className,right:Math.round(e.getBoundingClientRect().right),width:Math.round(e.getBoundingClientRect().width)})).slice(0,15))`).catch(()=>''));if(ws&&context)console.log('PAGE',await evaluate('document.body.innerText').catch(()=>''));process.exitCode=1;}
 finally{ws?.close();firefox.kill(); await new Promise(r=>firefox.once('exit',r)); fs.rmSync(profile,{recursive:true,force:true});}
