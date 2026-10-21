@@ -145,7 +145,7 @@ All 4 scenarios tested with `ENABLE_DELETION_SYNC=false`:
 
 #### Query Radarr for movie by name
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- docker exec status-tracker python -c "
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec status-tracker python -c "
 import httpx, os
 radarr_key = os.environ.get(\"RADARR_API_KEY\", \"\")
 resp = httpx.get(\"http://radarr:7878/api/v3/movie\", headers={\"X-Api-Key\": radarr_key})
@@ -157,7 +157,7 @@ for m in resp.json():
 
 #### Query Sonarr for series by name
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- docker exec status-tracker python -c "
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec status-tracker python -c "
 import httpx, os
 sonarr_key = os.environ.get(\"SONARR_API_KEY\", \"\")
 resp = httpx.get(\"http://sonarr:8989/api/v3/series\", headers={\"X-Api-Key\": sonarr_key})
@@ -169,7 +169,7 @@ for s in resp.json():
 
 #### Query Jellyfin for item by name
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- docker exec status-tracker python -c "
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec status-tracker python -c "
 import httpx, os
 jellyfin_key = os.environ.get(\"JELLYFIN_API_KEY\", \"\")
 resp = httpx.get(
@@ -184,7 +184,7 @@ for item in resp.json().get(\"Items\", []):
 
 #### Query Shoko for series by name
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- docker exec status-tracker python -c "
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec status-tracker python -c "
 import httpx, os
 shoko_key = os.environ.get(\"SHOKO_API_KEY\", \"\")
 resp = httpx.get(\"http://shoko:8111/api/v3/Series\", headers={\"apikey\": shoko_key}, params={\"pageSize\": 100})
@@ -196,7 +196,7 @@ for s in resp.json().get(\"List\", []):
 
 #### Query Jellyseerr for request by TMDB ID (direct DB query - safe)
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- sqlite3 /opt/appdata/jellyseerr/db/db.sqlite3 "
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- sqlite3 /opt/appdata/jellyseerr/db/db.sqlite3 "
 SELECT m.id, m.tmdbId, m.status, r.id as request_id
 FROM media m LEFT JOIN media_request r ON r.mediaId = m.id
 WHERE m.tmdbId = <TMDB_ID>;
@@ -206,14 +206,14 @@ WHERE m.tmdbId = <TMDB_ID>;
 #### Verify specific ID exists (replace SERVICE/ID)
 ```bash
 # Radarr
-ssh root@10.0.2.10 'pct exec 220 -- docker exec status-tracker python -c "
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec status-tracker python -c "
 import httpx, os
 key = os.environ.get(\"RADARR_API_KEY\", \"\")
 resp = httpx.get(\"http://radarr:7878/api/v3/movie/<ID>\", headers={\"X-Api-Key\": key})
 print(f\"EXISTS\" if resp.status_code == 200 else f\"NOT FOUND ({resp.status_code})\")"'
 
 # Jellyfin (use query param method - direct /Items/{id} returns 400)
-ssh root@10.0.2.10 'pct exec 220 -- docker exec status-tracker python -c "
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec status-tracker python -c "
 import httpx, os
 key = os.environ.get(\"JELLYFIN_API_KEY\", \"\")
 resp = httpx.get(\"http://jellyfin:8096/Items\", headers={\"X-Emby-Token\": key}, params={\"Ids\": \"<ID>\"})
@@ -225,22 +225,22 @@ print(f\"EXISTS - {items[0][\"Name\"]}\" if items else \"NOT FOUND\")"'
 
 ### Check current sync setting
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- docker exec status-tracker printenv ENABLE_DELETION_SYNC'
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec status-tracker printenv ENABLE_DELETION_SYNC'
 ```
 
 ### Enable deletion sync
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- bash -c "cd /opt/stacks/monitor && sed -i \"s/ENABLE_DELETION_SYNC=false/ENABLE_DELETION_SYNC=true/\" .env && docker compose up -d"'
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- bash -c "cd /opt/stacks/monitor && sed -i \"s/ENABLE_DELETION_SYNC=false/ENABLE_DELETION_SYNC=true/\" .env && docker compose up -d"'
 ```
 
 ### Disable deletion sync
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- bash -c "cd /opt/stacks/monitor && sed -i \"s/ENABLE_DELETION_SYNC=true/ENABLE_DELETION_SYNC=false/\" .env && docker compose up -d"'
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- bash -c "cd /opt/stacks/monitor && sed -i \"s/ENABLE_DELETION_SYNC=true/ENABLE_DELETION_SYNC=false/\" .env && docker compose up -d"'
 ```
 
 ### Create test card in database
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- sqlite3 /opt/appdata/status-tracker/tracker.db "
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- sqlite3 /opt/appdata/status-tracker/tracker.db "
 INSERT INTO requests (title, media_type, state, radarr_id, jellyfin_id, year, requested_by, created_at, updated_at, state_changed_at)
 VALUES (\"Movie Title (Year)\", \"MOVIE\", \"AVAILABLE\", <radarr_id>, \"<jellyfin_id>\", <year>, \"adept\", datetime(\"now\"), datetime(\"now\"), datetime(\"now\"));
 "'
@@ -248,7 +248,7 @@ VALUES (\"Movie Title (Year)\", \"MOVIE\", \"AVAILABLE\", <radarr_id>, \"<jellyf
 
 ### Clean deletion logs
 ```bash
-ssh root@10.0.2.10 'pct exec 220 -- sqlite3 /opt/appdata/status-tracker/tracker.db "
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- sqlite3 /opt/appdata/status-tracker/tracker.db "
 DELETE FROM deletion_sync_events;
 DELETE FROM deletion_logs;
 "'

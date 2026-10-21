@@ -4,7 +4,6 @@
 
 ```
 docs/
-├── ROADMAP.md          # Current priorities, backlog, and commands
 ├── reference/          # Useful reference docs
 │   └── SHOKOFIN-VFS-REBUILD.md
 └── archive/            # Historical (implemented/superseded)
@@ -20,7 +19,7 @@ See [Testing](TESTING.md) for the regression suite, browser tests and dev review
 
 | Document | Description |
 |----------|-------------|
-| [ROADMAP.md](ROADMAP.md) | **Start here** - Current priorities, backlog, deploy commands |
+| [../roadmap/](../roadmap/README.md) | **Start here** - Milestones; legacy internal plan in `roadmap/2026-10-20-internal-roadmap-legacy.md` |
 | [reference/SHOKOFIN-VFS-REBUILD.md](reference/SHOKOFIN-VFS-REBUILD.md) | VFS rebuild commands and Shokofin config |
 
 ## Issues

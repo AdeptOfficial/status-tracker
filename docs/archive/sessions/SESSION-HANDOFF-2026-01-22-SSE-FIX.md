@@ -123,15 +123,15 @@ Currently at `approved` state - waiting for Sonarr to grab. Good test for per-ep
 
 ## Deployment Info
 
-- **Dev server:** `ssh root@10.0.2.10`
-- **LXC:** 220 (media-dev, 10.0.2.20)
+- **Dev server:** `ssh root@<dev-proxmox>`
+- **LXC:** 220 (media-dev, <media-dev>)
 - **Status-tracker port:** 8100
 - **Feature branch:** `fix/media-workflow-audit`
 - **Deploy command:**
   ```bash
-  rsync -avz --exclude '.env' --exclude '__pycache__' /home/adept/git/status-tracker-workflow-fix/ root@10.0.2.10:/tmp/status-tracker-update/
-  ssh root@10.0.2.10 "cd /tmp/status-tracker-update && tar --exclude='.env' -cf - . | pct exec 220 -- tar -xf - -C /opt/status-tracker/"
-  ssh root@10.0.2.10 "pct exec 220 -- bash -c 'cd /opt/status-tracker && docker compose up -d --build'"
+  rsync -avz --exclude '.env' --exclude '__pycache__' /home/adept/git/status-tracker-workflow-fix/ root@<dev-proxmox>:/tmp/status-tracker-update/
+  ssh root@<dev-proxmox> "cd /tmp/status-tracker-update && tar --exclude='.env' -cf - . | pct exec <media-dev-vmid> -- tar -xf - -C /opt/status-tracker/"
+  ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- bash -c 'cd /opt/status-tracker && docker compose up -d --build'"
   ```
 
 ---

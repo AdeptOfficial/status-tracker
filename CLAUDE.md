@@ -11,15 +11,7 @@ Request → Indexed → Downloading → Importing → [Anime Matching] → Avail
 
 ## Inbox Processing (Check on Every Startup)
 
-**IMPORTANT:** Always read `inbox.txt` on startup for quick notes from the user.
-
-**Workflow:**
-1. Read `inbox.txt` for items under "Issues:" or "Features:"
-2. Process each item → create markdown in `features/` or `issues/`
-3. **Clear processed items from `inbox.txt`** after creating the tracking file
-4. Update `DIARY.md` if significant
-
-**After processing:** Remove the item text from inbox.txt, leaving only the section headers.
+**IMPORTANT:** Read `inbox.txt` on startup and run `~/git/workflows/process-inbox.md`: one new `YYYY-MM-DD-slug.md` per line in `ideas/`, `bugs/`, `issues/` or `features/`, regenerate the index, then remove only the processed lines (infrastructure items go to `~/git/homeserver/issues/`).
 
 ## Project Structure
 
@@ -42,9 +34,8 @@ status-tracker/
 ├── .env.template            # Environment variables template
 ├── Dockerfile
 ├── docs/                    # Technical documentation
-├── issues/                  # Bug tracking
-│   └── resolved/            # Completed issues (move here when done)
-└── features/                # Feature planning
+├── ideas/ bugs/ issues/     # Tracker, one file per item; rules in ~/git/homeserver-apps/AGENTS.md
+├── features/ roadmap/       # (roadmap is public-safe)
 ```
 
 ## Development

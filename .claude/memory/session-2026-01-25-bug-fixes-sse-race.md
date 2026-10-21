@@ -20,9 +20,9 @@ From `/home/adept/git/homeserver/CLAUDE.md`:
 
 ## Dev Environment
 
-- **Proxmox host:** 10.0.2.10
-- **Media-dev LXC:** 10.0.2.20 (VMID 220)
-- **Status-Tracker:** http://10.0.2.20:8100
+- **Proxmox host:** <dev-proxmox>
+- **Media-dev LXC:** <media-dev> (VMID <media-dev>)
+- **Status-Tracker:** http://<media-dev>:8100
 - **Deploy script:** `/home/adept/git/status-tracker-workflow-fix/scripts/deploy.sh`
 - **Database:** `/config/tracker.db` (inside container)
 
@@ -173,7 +173,7 @@ SECURITY PROTOCOLS (CRITICAL):
 - NEVER run printenv, env, docker inspect
 - NEVER display or leak API keys
 - NEVER SSH without explicit permission
-- Dev server: 10.0.2.20:8100 (LXC 220)
+- Dev server: <media-dev>:8100 (LXC <media-dev>)
 
 KNOWN ISSUES (not status-tracker bugs):
 - Shoko treats some movies as series (AniDB categorization)

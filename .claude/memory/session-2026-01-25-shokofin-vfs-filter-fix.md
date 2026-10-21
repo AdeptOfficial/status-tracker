@@ -70,17 +70,17 @@ Anime movie "Cosmic Princess Kaguya!" was stuck at `anime_matching` state. After
 
 ```bash
 # Check VFS content
-ssh root@10.0.2.10 'pct exec 220 -- docker exec jellyfin ls -la "/config/Shokofin/VFS/abebc196-cc1b-8bbf-6f8b-b5ca7b5ad6f1/"'
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec jellyfin ls -la "/config/Shokofin/VFS/abebc196-cc1b-8bbf-6f8b-b5ca7b5ad6f1/"'
 
 # Check VFS generation logs
-ssh root@10.0.2.10 'pct exec 220 -- docker logs jellyfin 2>&1' | grep -i "Created.*entries"
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker logs jellyfin 2>&1' | grep -i "Created.*entries"
 
 # Check Shoko series TMDB status
-ssh root@10.0.2.10 'pct exec 220 -- docker exec status-tracker sh -c "curl -s -H \"apikey: \$SHOKO_API_KEY\" http://shoko:8111/api/v3/Series/32"' | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('IDs',{}).get('TMDB',{}))"
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec status-tracker sh -c "curl -s -H \"apikey: \$SHOKO_API_KEY\" http://shoko:8111/api/v3/Series/32"' | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('IDs',{}).get('TMDB',{}))"
 
 # Edit Shokofin config
-ssh root@10.0.2.10 'pct exec 220 -- docker exec jellyfin sed -i "s|<FilterMovieLibraries>true</FilterMovieLibraries>|<FilterMovieLibraries>false</FilterMovieLibraries>|" /config/plugins/configurations/Shokofin.xml'
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec jellyfin sed -i "s|<FilterMovieLibraries>true</FilterMovieLibraries>|<FilterMovieLibraries>false</FilterMovieLibraries>|" /config/plugins/configurations/Shokofin.xml'
 
 # Restart Jellyfin
-ssh root@10.0.2.10 'pct exec 220 -- docker restart jellyfin'
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker restart jellyfin'
 ```

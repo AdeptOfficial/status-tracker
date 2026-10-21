@@ -1,8 +1,53 @@
 # Issue: Radarr/Sonarr Rejecting All Releases
 
 **Date:** 2026-01-25
-**Status:** Investigation Complete - Arr Configuration Issue
+**Status:** DEV Interstellar coverage repaired; historical anime/TV validation open
 **Priority:** High
+
+## October 20 repair and movie flow proof
+
+Added/tested free public Knaben id10 with movies tag and synced Radarr. Interstellar
+query returned68 Knaben results,33 approved. A normal approved4.21GiB1080p release
+was selected to fit available storage instead of the preferred33.26GiB remux.
+No force/profile override. Download, Radarr import, Jellyfin discovery and tracker23
+Available then occurred automatically. File is readable and hardlinked; playback
+and fresh-folder modes not yet proved. This is manual selection followed by
+normal automatic flow, not proof of unattended selection under current capacity.
+
+Aligned Prowlarr and new internal-only Byparr helper direct egress. Full1337x test
+passed/backoff cleared; torrent VPN/kill switch preserved. No production change.
+See newest DIARY and homeserver notes/2026-10-20-dev-knaben-validation.json.
+The following sections are historical pre-change evidence; January profile claims
+remain hypotheses rather than the proven cause of this movie failure.
+
+## October 20 follow-up: search infrastructure diagnosis
+
+1337x is enabled but in Cloudflare failure backoff. Its solver shares the correct
+tag but uses a different public exit from Prowlarr. Both temporary aligned and
+existing solver browser fetches reached the real site; full Prowlarr cookie replay
+still needs testing. No live routing/indexer settings changed. Recommended adding
+Knaben for general coverage after its public API returned20 seeded Interstellar
+results from DEV. Not added or tested through Radarr yet. See homeserver issue
+`issues/bugs/cloudflare-indexers-unavailable.md` and newest diaries.
+
+## October 20 live reproduction: wrong content from search
+
+Fresh Interstellar2014 re-request: Jellyseerr152 → tracker23 Approved → Radarr108
+monitored. Automatic MoviesSearch742302 completed at15:38:16 UTC with no grab.
+Interactive query returned13 Nyaa.si (Prowlarr) results and0 approved; all reported
+Unable to parse release. Inspected samples are unrelated anime titled Interstellar
+Wanderer/Interstellar Journey, not TMDB157336. No qBittorrent download, Radarr file
+or Jellyfin item exists for this request. Tracker correctly remains Approved.
+
+Do not infer a quality/custom-format failure from the January hypothesis below:
+current evidence establishes missing matching movie results. Restore general-movie
+indexer coverage, confirm correct title/year, then observe an ordinary automatic
+grab; do not force unrelated releases or weaken profiles to make a test pass.
+No indexer configurations/credentials were read or changed during this check.
+
+The existing empty film folder (1000:1000,0775) was reused, so fresh-directory
+permissions remain untested. Current226-test build is unchanged. This check
+proves re-request creation/correlation only, not download/import/playback.
 
 ## Summary
 

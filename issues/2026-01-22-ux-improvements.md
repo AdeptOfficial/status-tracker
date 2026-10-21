@@ -1,5 +1,7 @@
 # UX Improvements Identified
 
+Legacy bundle: holds several items from before the one-file-per-item rule; split it when next touched.
+
 **Date:** 2026-01-22
 **Source:** Live testing session
 

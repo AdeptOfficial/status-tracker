@@ -115,16 +115,16 @@ Requested "BOCCHI THE ROCK!" (12 episodes) to test flow:
 ```bash
 # Sync to dev (ALWAYS exclude .env!)
 rsync -avz --exclude '.env' --exclude '__pycache__' --exclude '.git' \
-  /home/adept/git/status-tracker-workflow-fix/ root@10.0.2.10:/tmp/status-tracker-update/
+  /home/adept/git/status-tracker-workflow-fix/ root@<dev-proxmox>:/tmp/status-tracker-update/
 
-# Copy into LXC 220 (preserves server .env)
-ssh root@10.0.2.10 "cd /tmp/status-tracker-update && tar --exclude='.env' -cf - . | pct exec 220 -- tar -xf - -C /opt/status-tracker/"
+# Copy into LXC <media-dev> (preserves server .env)
+ssh root@<dev-proxmox> "cd /tmp/status-tracker-update && tar --exclude='.env' -cf - . | pct exec <media-dev-vmid> -- tar -xf - -C /opt/status-tracker/"
 
 # Rebuild container
-ssh root@10.0.2.10 "pct exec 220 -- bash -c 'cd /opt/status-tracker && docker compose up -d --build'"
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- bash -c 'cd /opt/status-tracker && docker compose up -d --build'"
 
 # Check health
-ssh root@10.0.2.10 "pct exec 220 -- curl -s http://localhost:8100/api/health"
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- curl -s http://localhost:8100/api/health"
 ```
 
 ---

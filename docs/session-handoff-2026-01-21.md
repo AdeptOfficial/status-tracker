@@ -80,7 +80,7 @@ total_episodes       ← TV: target count
 
 - Never read `.env`, `config.xml`, `settings.json` without explicit request
 - Never run `printenv`, `env`, `docker inspect`, `docker-compose config`
-- SSH access: `ssh root@10.0.2.10` then `pct enter 220` for media LXC
+- SSH access: `ssh root@<dev-proxmox>` then `pct enter <media-dev-vmid>` for media LXC
 
 ## Next Steps
 

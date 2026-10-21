@@ -68,12 +68,12 @@ Restart Jellyfin after config change.
 
 ```bash
 # Edit config
-ssh root@10.0.2.10 'pct exec 220 -- docker exec jellyfin sed -i \
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker exec jellyfin sed -i \
   "s|<FilterMovieLibraries>true</FilterMovieLibraries>|<FilterMovieLibraries>false</FilterMovieLibraries>|" \
   /config/plugins/configurations/Shokofin.xml'
 
 # Restart Jellyfin
-ssh root@10.0.2.10 'pct exec 220 -- docker restart jellyfin'
+ssh root@<dev-proxmox> 'pct exec <media-dev-vmid> -- docker restart jellyfin'
 ```
 
 ## Verification

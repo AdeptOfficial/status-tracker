@@ -1,5 +1,7 @@
 # Issue: Timeline UX Improvements + Shoko Auto-Match Failure
 
+Legacy bundle: holds several items from before the one-file-per-item rule; split it when next touched.
+
 **Date:** 2026-01-25
 **Severity:** Low (UX polish)
 **Status:** PENDING

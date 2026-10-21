@@ -55,7 +55,7 @@ Branch: `feature/per-episode-tracking` (based on `fix/media-workflow-audit`)
 
 ### 5. Deployed to Dev Server ✅
 
-All changes deployed to LXC 220 (media-dev).
+All changes deployed to LXC <media-dev> (media-dev).
 
 ---
 
@@ -136,7 +136,7 @@ REQUESTED → APPROVED → GRABBING → DOWNLOADING → DOWNLOADED → IMPORTING
 
 ### Check VFS contents
 ```bash
-ssh root@10.0.2.10 "pct exec 220 -- docker exec jellyfin ls -la '/config/Shokofin/VFS/29391378-c411-8b35-b77f-84980d25f0a6/'"
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- docker exec jellyfin ls -la '/config/Shokofin/VFS/29391378-c411-8b35-b77f-84980d25f0a6/'"
 ```
 
 ### Library IDs
@@ -148,17 +148,17 @@ ssh root@10.0.2.10 "pct exec 220 -- docker exec jellyfin ls -la '/config/Shokofi
 
 ### Check Shoko series
 ```bash
-ssh root@10.0.2.10 "pct exec 220 -- docker logs shoko --tail 50 2>&1" | grep -i 'lycoris'
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- docker logs shoko --tail 50 2>&1" | grep -i 'lycoris'
 ```
 
 ### Check Shokofin SignalR
 ```bash
-ssh root@10.0.2.10 "pct exec 220 -- docker logs jellyfin 2>&1" | grep -i 'signalr.*connected'
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- docker logs jellyfin 2>&1" | grep -i 'signalr.*connected'
 ```
 
 ### Check fallback checker
 ```bash
-ssh root@10.0.2.10 "pct exec 220 -- docker logs status-tracker --tail 50" | grep -i 'FALLBACK'
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- docker logs status-tracker --tail 50" | grep -i 'FALLBACK'
 ```
 
 ---
@@ -168,19 +168,19 @@ ssh root@10.0.2.10 "pct exec 220 -- docker logs status-tracker --tail 50" | grep
 ```bash
 # Sync to dev (ALWAYS exclude .env!)
 rsync -avz --exclude '.env' --exclude '__pycache__' --exclude '.git' \
-  /home/adept/git/status-tracker-workflow-fix/ root@10.0.2.10:/tmp/status-tracker-update/
+  /home/adept/git/status-tracker-workflow-fix/ root@<dev-proxmox>:/tmp/status-tracker-update/
 
-# Copy into LXC 220 (preserves server .env)
-ssh root@10.0.2.10 "cd /tmp/status-tracker-update && tar --exclude='.env' -cf - . | pct exec 220 -- tar -xf - -C /opt/status-tracker/"
+# Copy into LXC <media-dev> (preserves server .env)
+ssh root@<dev-proxmox> "cd /tmp/status-tracker-update && tar --exclude='.env' -cf - . | pct exec <media-dev-vmid> -- tar -xf - -C /opt/status-tracker/"
 
 # Rebuild container
-ssh root@10.0.2.10 "pct exec 220 -- bash -c 'cd /opt/status-tracker && docker compose up -d --build'"
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- bash -c 'cd /opt/status-tracker && docker compose up -d --build'"
 
 # Check health
-ssh root@10.0.2.10 "pct exec 220 -- curl -s http://localhost:8100/api/health"
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- curl -s http://localhost:8100/api/health"
 
 # Tail logs
-ssh root@10.0.2.10 "pct exec 220 -- docker logs status-tracker --tail 50"
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- docker logs status-tracker --tail 50"
 ```
 
 ---

@@ -23,7 +23,7 @@ DEV verified Cyberpunk S1 request-to-playback and one regular movie deletion.
 Movie deletion now checks actual file and library removal before completion.
 TV deletion is temporarily blocked until season scope is implemented. S2 import,
 a fresh re-request cycle and anime deletion still need validation. Production
-release requires owner approval; see [roadmap](docs/ROADMAP.md).
+release requires owner approval; see [roadmap](roadmap/README.md).
 
 Before enabling deletion, follow [media permissions and deletion setup](docs/MEDIA-PERMISSIONS.md).
 It explains service identities, directory access, the disposable preflight,
@@ -85,7 +85,7 @@ app/
 
 Current DEV evidence and reproducible test commands are in
 [testing](docs/TESTING.md). Historical January completion claims are superseded by
-those results and the [release roadmap](docs/ROADMAP.md).
+those results and the [release roadmap](roadmap/README.md).
 
 ## Local Development
 

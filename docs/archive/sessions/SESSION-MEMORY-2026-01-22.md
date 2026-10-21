@@ -178,16 +178,16 @@ Fix stuck media requests and implement 4 media workflows:
 
 ```bash
 # Check request state
-ssh root@10.0.2.10 "pct exec 220 -- curl -s 'http://localhost:8100/api/requests?page=1'" | jq '.requests[] | {id, title, state}'
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- curl -s 'http://localhost:8100/api/requests?page=1'" | jq '.requests[] | {id, title, state}'
 
 # Check logs
-ssh root@10.0.2.10 "pct exec 220 -- docker logs status-tracker --tail 50"
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- docker logs status-tracker --tail 50"
 
 # Trigger VFS rebuild
-ssh root@10.0.2.10 "pct exec 220 -- curl -s -X POST 'http://10.0.2.20:8096/Library/Refresh' -H 'X-Emby-Token: API_KEY'"
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- curl -s -X POST 'http://<media-dev>:8096/Library/Refresh' -H 'X-Emby-Token: API_KEY'"
 
 # Check Shokofin config
-ssh root@10.0.2.10 "pct exec 220 -- docker exec jellyfin grep -A5 ManagedFolderId /config/plugins/configurations/Shokofin.xml"
+ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- docker exec jellyfin grep -A5 ManagedFolderId /config/plugins/configurations/Shokofin.xml"
 ```
 
 ---

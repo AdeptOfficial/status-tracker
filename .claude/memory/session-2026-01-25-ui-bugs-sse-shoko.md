@@ -19,9 +19,9 @@ From `/home/adept/git/homeserver/CLAUDE.md`:
 
 ## Dev Environment
 
-- **Proxmox host:** 10.0.2.10
-- **Media-dev LXC:** 10.0.2.20 (VMID 220)
-- **Status-Tracker:** http://10.0.2.20:8100
+- **Proxmox host:** <dev-proxmox>
+- **Media-dev LXC:** <media-dev> (VMID <media-dev>)
+- **Status-Tracker:** http://<media-dev>:8100
 - **Deploy script:** `/home/adept/git/status-tracker-workflow-fix/scripts/deploy.sh`
 
 ---
@@ -104,7 +104,7 @@ else:
 
 ## Feature Request Created
 
-- `features/display-original-title.md` - Show Japanese title alongside English (helps debug indexer issues)
+- `features/2026-01-25-display-original-title.md` - Show Japanese title alongside English (helps debug indexer issues)
 
 ---
 

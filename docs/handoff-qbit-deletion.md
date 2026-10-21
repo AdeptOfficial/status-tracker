@@ -93,6 +93,5 @@ ALTER TABLE deletion_logs ADD COLUMN qbit_hash VARCHAR(100);
 
 ## Related Issues
 
-- `issues/deletion-missing-qbittorrent.md`
-- `issues/deletion-remove-qbittorrent-torrent.md`
-- `issues/deletion-integration-gaps.md`
+- `bugs/2026-01-21-deletion-remove-qbittorrent-torrent.md` (the older deletion-missing-qbittorrent report was merged into it)
+- `issues/2026-01-21-deletion-integration-gaps.md`

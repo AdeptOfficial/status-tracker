@@ -194,7 +194,7 @@ server credentials, or live data are mounted. For focused checks:
 ```
 
 October 17 result: **111 passed**, including 20 episode-progress cases added to the
-existing 91 tests. The deployment image passed the same suite on DEV LXC 220 via
+existing 91 tests. The deployment image passed the same suite on DEV LXC <media-dev> via
 `python -m pytest` (its image does not include the pytest executable wrapper).
 Existing deprecation/async-cleanup warnings remain: 869 warnings on this run.
 They are not treated as errors; passing tests are not a claim those warnings are fixed.
@@ -255,7 +255,7 @@ API reference: [qBittorrent torrent contents](https://github.com/qbittorrent/qBi
 
 ## Dev review
 
-DEV only: http://10.0.2.20:8100. Existing completed requests show the new summaries;
+DEV only: http://<media-dev>:8100. Existing completed requests show the new summaries;
 for example `/request/17` and `/request/10`. There are no active dev downloads, so
 live partial-file behavior has only been tested with fixtures. No new download
 was initiated. Production is unchanged and requires separate explicit approval.

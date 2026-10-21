@@ -70,13 +70,13 @@ docs/flows/captured-webhooks/
 ## Dev Server Access
 
 ```
-LXC 220 on 10.0.2.10
-IP: 10.0.2.20
+LXC <media-dev> on <dev-proxmox>
+IP: <media-dev>
 Port: 8100
 Path: /opt/status-tracker/
 ```
 
-Check logs: `ssh root@10.0.2.10 "pct exec 220 -- bash -c 'cd /opt/status-tracker && docker compose logs --tail=100 status-tracker'"`
+Check logs: `ssh root@<dev-proxmox> "pct exec <media-dev-vmid> -- bash -c 'cd /opt/status-tracker && docker compose logs --tail=100 status-tracker'"`
 
 ## Security Reminders
 

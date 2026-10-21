@@ -1,0 +1,9 @@
+# Placeholder tokens (YOUR_API_KEY) in old docs, confirmed not secrets 2026-10-20
+de46b70c2bfd9f8456561e3fd28c2109fe51525e:docs/ANIME-WORKFLOW-FIX-SUMMARY.md:curl-auth-header:29
+de46b70c2bfd9f8456561e3fd28c2109fe51525e:docs/flows/SHOKOFIN-VFS-REBUILD.md:curl-auth-header:25
+de46b70c2bfd9f8456561e3fd28c2109fe51525e:docs/flows/SHOKOFIN-VFS-REBUILD.md:curl-auth-header:33
+de46b70c2bfd9f8456561e3fd28c2109fe51525e:docs/flows/SHOKOFIN-VFS-REBUILD.md:curl-auth-header:51
+docs/archive/planning/ANIME-WORKFLOW-FIX-SUMMARY.md:curl-auth-header:29
+docs/reference/SHOKOFIN-VFS-REBUILD.md:curl-auth-header:25
+docs/reference/SHOKOFIN-VFS-REBUILD.md:curl-auth-header:33
+docs/reference/SHOKOFIN-VFS-REBUILD.md:curl-auth-header:51
