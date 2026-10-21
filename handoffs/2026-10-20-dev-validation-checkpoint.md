@@ -77,8 +77,8 @@ user-gated. This session's DEV access is not blanket authorization for a new ses
 
 ## Current deployed DEV components
 
-DEV Proxmox root@10.0.2.10, media LXC220, hostname media-dev, IP10.0.2.20.
-Operate through `pct exec 220 -- ...` on the host; verify inventory/hostname first.
+DEV Proxmox root@<dev-proxmox>, media LXC <media-dev>, hostname media-dev, IP10.0.2.20.
+Operate through `pct exec <media-dev-vmid> -- ...` on the host; verify inventory/hostname first.
 No production server was accessed for this work.
 
 | Component | Verified state / ownership |
@@ -163,7 +163,7 @@ Other backlog: multi-season selection in ONE request, requested grab-count/timel
 size UX, unaired episodes, inherited test warnings. See existing issue files;
 do not claim every historical UI proposal is complete.
 
-## Private rollback/evidence locations (DEV LXC220)
+## Private rollback/evidence locations (DEV LXC <media-dev>)
 
 - Tracker current: `/opt/backups/status-tracker-before-split-files-20261020/`,
   image `status-tracker:before-split-files-20261020`.

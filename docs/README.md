@@ -20,17 +20,17 @@ See [Testing](TESTING.md) for the regression suite, browser tests and dev review
 | Document | Description |
 |----------|-------------|
 | [../roadmap/](../roadmap/README.md) | **Start here** - Milestones; legacy internal plan in `roadmap/2026-10-20-internal-roadmap-legacy.md` |
+| [SETUP.md](SETUP.md) | Project layout, network requirements, webhook configuration |
+| [API.md](API.md) | Endpoints and authentication |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common issues, debug mode |
+| [../ops/README.md](../ops/README.md) | Runbook: run, deploy, database, rollback |
 | [reference/SHOKOFIN-VFS-REBUILD.md](reference/SHOKOFIN-VFS-REBUILD.md) | VFS rebuild commands and Shokofin config |
 
-## Issues
+## Tracker
 
-All issues are tracked in `/issues/` at repo root:
-- Active issues: `/issues/*.md`
-- Resolved issues: `/issues/resolved/*.md`
-
-## Features
-
-Feature requests are tracked in `/features/` at repo root.
+One file per item at the repo root: `bugs/` (malfunctions), `issues/` (gaps and
+investigations), `features/` (accepted capabilities), `ideas/`, `roadmap/`; each
+folder's README is a generated index.
 
 ## Archive
 

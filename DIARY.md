@@ -1,3 +1,16 @@
+## 2026-10-20: README trimmed to overview, status, run and links
+
+Project structure, network requirements and webhook configuration moved to
+`docs/SETUP.md`; API notes to `docs/API.md`; troubleshooting to
+`docs/TROUBLESHOOTING.md`. README is now 70-odd lines; docs index updated and its
+tracker wording matches the current layout. No source change.
+
+## 2026-10-20: Handoff scrubbed for the public repo
+
+The consolidated handoff was copied from a private file and carried private
+addresses and LXC ids for one pushed commit; replaced with the usual placeholders.
+Real values stay in the homeserver service README. No credentials were involved.
+
 ## 2026-10-20: Session state moved out of the entry point
 
 `AGENTS.md` is pointers and working rules only. Its handoff and verified-DEV-state

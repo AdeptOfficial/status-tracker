@@ -12,9 +12,10 @@ Request → Indexed → Downloading → Importing → [Anime Matching] → Avail
 
 ## Documentation
 
-- **Feature plans:** `features/`
-- **Known issues:** `issues/`
-- **Technical docs:** `docs/`
+- **Runbook:** `ops/README.md` (run, deploy, database, rollback)
+- **Setup reference:** `docs/SETUP.md` (project layout, network, webhooks)
+- **API:** `docs/API.md` · **Troubleshooting:** `docs/TROUBLESHOOTING.md` · **Testing:** `docs/TESTING.md`
+- **Tracker:** `bugs/`, `issues/`, `features/`, `roadmap/` (one file per item, see each README)
 - **Development log:** `DIARY.md`
 
 ## Current status (2026-10-20)
@@ -28,58 +29,6 @@ release requires owner approval; see [roadmap](roadmap/README.md).
 Before enabling deletion, follow [media permissions and deletion setup](docs/MEDIA-PERMISSIONS.md).
 It explains service identities, directory access, the disposable preflight,
 verification behavior and recovery. Status Tracker does not need a media mount.
-
-## Project Structure
-
-```
-app/
-├── main.py              # FastAPI entry point
-├── config.py            # Environment settings
-├── database.py          # SQLite async setup
-├── models.py            # MediaRequest, TimelineEvent, DeletionLog
-├── schemas.py           # Pydantic schemas
-├── core/
-│   ├── plugin_base.py   # ServicePlugin base class
-│   ├── state_machine.py # State transitions
-│   ├── correlator.py    # Event matching
-│   └── broadcaster.py   # SSE broadcasting
-├── clients/
-│   ├── qbittorrent.py   # qBittorrent API client
-│   ├── jellyfin.py      # Jellyfin API (auth, deletion, verification)
-│   ├── sonarr.py        # Sonarr API (deletion)
-│   ├── radarr.py        # Radarr API (deletion)
-│   ├── shoko.py         # Shoko SignalR client
-│   └── jellyseerr.py    # Jellyseerr API (deletion)
-├── services/
-│   ├── auth.py          # Jellyfin token validation
-│   ├── deletion_orchestrator.py  # Deletion coordination
-│   ├── deletion_verifier.py      # Background verification
-│   ├── jellyfin_verifier.py      # Fallback checker for stuck requests
-│   ├── library_sync.py           # Sync existing Jellyfin library
-│   └── timeout_checker.py        # Stale request detection
-├── plugins/
-│   ├── __init__.py      # Auto-loader
-│   ├── jellyseerr.py    # Jellyseerr integration
-│   ├── sonarr.py        # Sonarr webhooks
-│   ├── radarr.py        # Radarr webhooks
-│   ├── jellyfin.py      # Jellyfin webhooks
-│   ├── shoko.py         # Shoko SignalR integration
-│   └── qbittorrent.py   # qBittorrent polling + webhook
-├── routers/
-│   ├── webhooks.py      # POST /hooks/{service}
-│   ├── api.py           # GET /api/*, deletion endpoints
-│   ├── sse.py           # GET /api/sse (real-time updates)
-│   └── pages.py         # HTML dashboard routes
-└── templates/
-    ├── base.html        # Base layout (AdepT token CSS + htmx)
-    ├── index.html       # Active requests page
-    ├── detail.html      # Request detail + timeline + delete
-    ├── history.html     # Completed requests + bulk delete
-    ├── login.html       # Jellyfin authentication
-    ├── deletion-logs.html  # Admin deletion audit log
-    └── components/
-        └── card.html    # Request card partial
-```
 
 ## Validation
 
@@ -110,149 +59,14 @@ Read the [setup guide](docs/MEDIA-PERMISSIONS.md) before enabling
 `ENABLE_DELETION_SYNC`. A successful API response alone does not prove filesystem
 access. Run the disposable preflight under each writer's actual numeric identity.
 
-### Network Requirements
-
-Status-tracker needs to communicate with your media services. Create a shared Docker network:
-
-```bash
-docker network create media-net
-```
-
-Add this to your media stack's compose file and restart it:
-```yaml
-networks:
-  default:
-    name: media-net
-    external: true
-```
-
-### Webhook Configuration
-
-Configure each service to send webhooks to status-tracker:
-
-| Service | URL | Events |
-|---------|-----|--------|
-| Jellyseerr | `http://status-tracker:8000/hooks/jellyseerr` | Pending, Approved |
-| Sonarr | `http://status-tracker:8000/hooks/sonarr` | Grab, Download |
-| Radarr | `http://status-tracker:8000/hooks/radarr` | Grab, Download |
-| Jellyfin | `http://status-tracker:8000/hooks/jellyfin` | ItemAdded (requires Webhook plugin) |
-
-**Note:** Shoko uses SignalR (configured via `SHOKO_*` env vars), not webhooks.
-
-## API Documentation
-
-FastAPI auto-generates interactive API docs:
-
-| Endpoint | Description |
-|----------|-------------|
-| `/docs` | Swagger UI - interactive API explorer |
-| `/redoc` | ReDoc - alternative API documentation |
-| `/openapi.json` | OpenAPI schema (JSON) |
-
-### Key API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/requests` | List all active requests |
-| `GET` | `/api/requests/{id}` | Get request details + timeline |
-| `GET` | `/api/history` | List completed requests |
-| `GET` | `/api/health` | Health check (service connectivity) |
-| `GET` | `/api/sse` | Server-Sent Events stream |
-| `POST` | `/hooks/{service}` | Webhook receiver (jellyseerr, sonarr, radarr, jellyfin) |
-| `POST` | `/api/requests/{id}/delete` | Delete request from all services |
-| `POST` | `/api/requests/bulk-delete` | Bulk delete from history |
-| `POST` | `/api/library-sync` | Trigger Jellyfin library sync |
-
-### Authentication
-
-Most endpoints require a valid Jellyfin token passed via cookie (`jellyfin_token`).
-
-Login at `/login` with your Jellyfin credentials.
-
-## Troubleshooting
-
-### Common Issues
-
-**Container won't start**
-```bash
-docker compose logs status-tracker
-# Check for missing env vars or connection errors
-```
-
-**Webhooks not received**
-```bash
-# Check container is on same network as media services
-docker network inspect media-net
-
-# Test webhook endpoint
-curl -X POST http://localhost:8100/hooks/test -d '{}'
-```
-
-**Requests stuck at IMPORTING**
-- Regular movies/TV: Check Jellyfin webhook plugin is installed and configured
-- Anime movies: Should auto-resolve via fallback checker (30s polling)
-- Anime TV: Check Shoko matches and the bounded library-refresh audit; see current testing evidence.
-
-**Database locked error**
-```bash
-# Stop container
-docker compose down
-
-# Check for stale lock
-ls -la data/
-
-# Restart
-docker compose up -d
-```
-
-**SSE not updating**
-- Both pages use live updates; reconnection and detail progress are covered by browser acceptance.
-- Check browser console for connection errors
-
-**Deletion fails for specific service**
-
-Follow the [permission and retry guide](docs/MEDIA-PERMISSIONS.md). Verify the
-movie file is really gone; do not infer success from a missing Radarr record.
-TV deletion is currently blocked to preserve sibling seasons.
-
-```bash
-# Check deletion logs
-curl http://localhost:8100/api/deletion-logs
-
-# Common causes:
-# - Service API key missing/invalid in .env
-# - ID not captured during initial request (shows "not_needed")
-# - Service unreachable (check docker network)
-```
-
-**Health endpoint shows service down**
-```bash
-# Access health dashboard
-curl http://localhost:8100/api/health
-
-# Verify service connectivity from container
-docker exec status-tracker curl http://sonarr:8989/api/v3/system/status
-```
-
-### Debug Mode
-
-Enable verbose logging:
-```bash
-# In .env
-LOG_LEVEL=DEBUG
-
-# Restart
-docker compose up -d --force-recreate
-```
-
-### Getting Help
-
-1. Check `issues/` folder for known issues
-2. Read `DIARY.md` for recent changes and fixes
-3. Check `docs/` for technical deep-dives
-
 ## Automated tests
 
 Run `./run_tests.sh -q` for isolated regressions. Real Firefox checks use
 `npm --prefix tests/browser ci --ignore-scripts` then `./run_browser_tests.sh`.
 See [testing and dev review](docs/TESTING.md) for prerequisites, scope and limits.
+
+## // codesign
+
+<img src="https://raw.githubusercontent.com/AdeptOfficial/AdeptOfficial/main/assets/codesign-typing.svg" alt="// code-signed by AdepT_X · stay sad and dead <3">
+
+<p align="right"><img src="https://raw.githubusercontent.com/AdeptOfficial/AdeptOfficial/main/assets/codesign.svg" alt="// code-signed by AdepT_X · stay sad and dead <3"></p>
