@@ -291,23 +291,4 @@ remain the code baseline. TV scope, anime cleanup and regular TV remain open.
 Evidence: homeserver notes/2026-10-20-dev-knaben-validation.json. Production and
 public release untouched; deferred content candidate updated without publishing.
 
-## 2026-10-20: DEV 1337x root-cause investigation and indexer recommendation
-
-1337x is enabled but in backoff until2026-10-21T04:10:39Z after repeated Cloudflare
-failures. Proxy/indexer tags match and Byparr is healthy. Verified outbound IPv4
-routes differ: Prowlarr follows the LXC's direct exit; Byparr uses VPN. No public
-IP values stored. Upstream requires matching solver/requester egress. A temporary
-same-network solver fetched actual1337x movie listings (200,35.9sec); existing
-solver also succeeded (200,54.8sec). Cookie replay through Prowlarr remains the
-untested failure boundary; do not claim the site is down or solver broken.
-Temporary helper removed; no live settings/Compose/VPN changes or downloads.
-
-Knaben public metadata API tested from DEV: HTTP200,20 Interstellar results with
-reported seeders. Recommended as an additional general source. Not added to
-Prowlarr, and Radarr integration/grab is untested. Updated existing Cloudflare
-issue with recovery plan and primary sources. Private TorrentLeech is optional
-if user has membership/invitation; no signup/purchase was made. Production untouched.
-Evidence: homeserver notes/2026-10-20-dev-indexer-investigation.json. Tracker23 remains pending
-matching movie search results; no forced grabs.
-
 Older entries: `docs/archive/diary/` (rolled by `tools/diary-roll.py`; read the newest three entries unless investigating history).
