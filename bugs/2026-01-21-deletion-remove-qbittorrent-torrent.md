@@ -151,3 +151,20 @@ if request.qbit_hash:
 
 **Verdict:** Resolved by later work. **Status:** Resolved (triage, repo evidence; no live check in this pass).
 `app/clients/qbittorrent.py` has `delete_torrent` calling `/api/v2/torrents/delete`; Oct 20 verified movie deletion checked file, library and provider absence. TV deletion remains blocked by a separate guard (see `issues/2026-01-21-deletion-integration-gaps.md`).
+
+## Reopened 2026-10-23
+
+**Status:** Open (reopened). The 2026-10-20 triage resolved this from repo evidence only: the client has
+`delete_torrent` (`app/clients/qbittorrent.py`), but **nothing calls it**. `grep -rn delete_torrent app`
+finds only the definition; `deletion_orchestrator.py` and `deletion_verifier.py` never mention
+qBittorrent.
+
+Live evidence (DEV, 2026-10-23): qBittorrent held **12 torrents in `missingFiles`**, category
+`tv-sonarr`, all for media deleted in earlier DEV deletion tests (Witch Hat Atelier episodes and packs,
+Cyberpunk: Edgerunners S2). Their files were gone, the torrents stayed. They were removed by hand
+(`deleteFiles=false`). Consequences match the original problem: stale torrents keep hashes that a
+re-request can collide with, and they clutter the client.
+
+Next: call `delete_torrent` from the deletion orchestrator for every hash recorded on the request and
+its episodes (with `deleteFiles` matching the deletion), record the result in the deletion sync events,
+and add a test; the acceptance criteria above still apply.
