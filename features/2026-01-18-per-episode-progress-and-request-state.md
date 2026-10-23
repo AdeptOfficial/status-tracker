@@ -54,6 +54,11 @@ synthetic tests only. The first real requests:
   and 2 mixed. Per-episode requests were marked AVAILABLE after the **first** episode (Makeine: 1 of 12;
   Orb: 1 of 25), with only one import recorded. The DEV build requires verified episodes for TV
   availability; that is still to be confirmed on a per-episode request (Gotham's import phase).
+- **Later the same day (DEV, Gotham):** with 6 episodes available and 6 still downloading, the request
+  sat in IMPORTING (not refreshed because of bug 2) past the import time limit and the timeout checker
+  moved it to **TIMEOUT**. E05 meanwhile stalled at 13% with 0 seeders (Sonarr status `warning`, still
+  `downloading`), E10–E12 queued with no known seeders: real cases for goal 4 (per-episode Stalled)
+  instead of a request-level timeout.
 - qBittorrent's run-on-completion webhook is off on DEV and production, so polling is the only source
   of completion.
 

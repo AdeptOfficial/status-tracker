@@ -32,6 +32,11 @@ speed or ETA while eleven episodes keep downloading.
   12 torrents) went DOWNLOADED at 1/12, recorded one import, and was marked AVAILABLE about three minutes
   after the first episode finished; Orb (25 episodes) the same at 1/25. Of 12 production anime requests,
   6 were one torrent per episode or mixed, so this affects about half of real anime requests.
+- **Later the same day (DEV, Gotham):** with 6 episodes available and 6 still downloading, the request
+  sat in IMPORTING (not refreshed because of bug 2) past the import time limit and the timeout checker
+  moved it to **TIMEOUT**. E05 meanwhile stalled at 13% with 0 seeders (Sonarr status `warning`, still
+  `downloading`), E10–E12 queued with no known seeders: real cases for goal 4 (per-episode Stalled)
+  instead of a request-level timeout.
 - qBittorrent's completion webhook is off on production too.
 - Raw evidence: homeserver `notes/2026-10-23-dev-gotham-per-episode-tracking.json` (private).
 
