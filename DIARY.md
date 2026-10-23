@@ -1,3 +1,13 @@
+## 2026-10-23: Per-episode feature rewritten with the agreed goal
+
+`features/2026-01-18-status-dashboard-multi-episode-tracking.md` renamed to
+[per-episode-progress-and-request-state](features/2026-01-18-per-episode-progress-and-request-state.md)
+and rewritten: goal agreed with the owner (one bar per episode; request DOWNLOADING until every episode
+is downloaded; Searching/Not found rows; per-episode Stalled), DEV Gotham and production anime evidence,
+and solution A–E against the current code. Original January spec and the 10-17 scope kept under
+History. Both 10-23 bugs link to it; January plan points to it. Docs only. Next: Gotham's import phase
+(per-episode availability), then implementation when the owner says so.
+
 ## 2026-10-23: Bug filed: TV request stops tracking after the first episode
 
 Same DEV Gotham S5 test: when 1 of 12 episodes finished, the request went DOWNLOADED and the

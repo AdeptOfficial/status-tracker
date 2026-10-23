@@ -4,6 +4,7 @@
 **Status:** Open (fix proposed, not implemented)
 **Severity:** Medium (per-episode progress missing on the dashboard and detail page; no state or data impact)
 **Found:** DEV regular-TV test, 2026-10-23 (Gotham S5, request 25)
+**Feature:** [per-episode progress and request state](../features/2026-01-18-per-episode-progress-and-request-state.md) (goal, evidence and the full proposed solution)
 **Related:** [episode progress UI improvements](../issues/2026-01-22-ui-episode-progress-improvements.md)
 
 ## Problem
@@ -58,6 +59,22 @@ RANGE = re.compile(r'(?i)^(?:e\d|[-_ ]+(?:s\d+)?e\d|[-_ ]*-[-_ ]*\d{1,3}(?![\dpi
 
 The bare-number branch requires a `-`, so ` 1080p`, ` 720p`, ` 2019` and ` 5 1` no longer match.
 Checked against all eleven cases below on 2026-10-23 (pattern only, outside the app): all correct.
+
+## Scope after the anime review (2026-10-23)
+
+Per-episode releases (one torrent per episode) can avoid file-name matching altogether: option B in the
+feature uses the single video file's progress when its marker matches the episode. With B, this bug only
+affects **season packs** with space-separated names. Absolute-numbered anime names (`- 02 [1080p]`) are
+not affected by this bug (no `SxxEyy`); absolute-numbered packs are a separate gap (feature, C2).
+`S01E05 v2` is matched correctly today (`v` is not a digit).
+
+## Current code check (2026-10-23)
+
+- `episode_progress.py` is the only place in the app that parses `SxxEyy` from a file name.
+- No schema change: the result goes into the existing nullable `episodes.download_progress`.
+- Existing cases in `tests/test_episode_progress.py` (all dot-separated): `S02E01E02` and `S02E01-E02`
+  are still skipped by the proposed pattern; the no-marker single-file fallback (`absolute-12.mkv`)
+  is untouched. None of the existing names uses spaces, which is why the bug was not caught.
 
 ## Tests to add (`tests/test_episode_progress.py`)
 

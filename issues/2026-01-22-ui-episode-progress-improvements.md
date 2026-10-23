@@ -118,7 +118,7 @@ S01E04  Passing Shower           ░░░░░░░░░░░░   0%
 ## Related Issues
 
 - `features/2026-01-18-per-episode-download-tracking.md` - Original per-episode feature (data model)
-- `features/2026-01-18-status-dashboard-multi-episode-tracking.md` - Multi-episode UI spec
+- `features/2026-01-18-per-episode-progress-and-request-state.md` - Per-episode progress and request state (agreed goal and proposed solution, 2026-10-23)
 
 ## Screenshots
 

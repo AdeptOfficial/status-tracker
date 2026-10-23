@@ -6,6 +6,13 @@
 **Priority:** Medium
 **Complexity:** High
 
+
+> **2026-10-23:** much of this January plan now exists in another form: the `episodes` table (per
+> episode state, `qbit_hash`, `download_progress`), episode rows created from Sonarr Grab webhooks, and
+> per-file progress for season packs. The current goal, evidence and proposed solution are in
+> [per-episode progress and request state](2026-01-18-per-episode-progress-and-request-state.md).
+> Per-episode deletion (Phase 5) remains open here.
+
 ## Problem
 
 Currently, status-tracker treats TV shows and anime as a single request, even when downloading multiple episodes. The download progress shows aggregate data, but users can't see:
