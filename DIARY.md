@@ -1,3 +1,11 @@
+## 2026-10-23: Bug filed: TV request stops tracking after the first episode
+
+Same DEV Gotham S5 test: when 1 of 12 episodes finished, the request went DOWNLOADED and the
+qBittorrent poll (GRABBING/DOWNLOADING requests only) dropped it; at 18:41 qBittorrent had 2/12 done
+and 73%, the tracker still 1/12 at 8% with no speed. Filed
+[bugs/2026-10-23-tv-poll-stops-after-first-episode.md](bugs/2026-10-23-tv-poll-stops-after-first-episode.md)
+with a proposed fix; not implemented. Next: watch the remaining episodes through Sonarr import.
+
 ## 2026-10-23: Bug filed: episode progress unknown for space-named files
 
 DEV regular-TV test (Gotham S5, Knaben via Prowlarr, one torrent per episode): episodes showed
