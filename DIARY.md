@@ -1,3 +1,13 @@
+## 2026-10-23: Bug filed: episode progress unknown for space-named files
+
+DEV regular-TV test (Gotham S5, Knaben via Prowlarr, one torrent per episode): episodes showed
+"progress unknown" while qBittorrent had per-file progress. The multi-episode guard in
+`file_progress()` reads ` 1080p` after `S05E02` as a second episode. Filed
+[bugs/2026-10-23-episode-progress-unknown-space-named-files.md](bugs/2026-10-23-episode-progress-unknown-space-named-files.md)
+with a proposed pattern and tests; not implemented. Also seen: APPROVED requests never time out
+(the state machine has no APPROVED → TIMEOUT), not filed yet. Next: unchanged; finish following
+the TV test to Available.
+
 ## 2026-10-21: Split-anime verification committed on release
 
 The split-file anime availability work (Jellyfin client and verifier, history
