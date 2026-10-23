@@ -48,7 +48,7 @@ uvicorn app.main:app --reload --port 8100
 ## Deployment
 
 ```bash
-cp .env.template .env
+install -m 600 .env.template .env
 # Edit .env with your values
 docker compose up -d --build
 ```

@@ -27,7 +27,7 @@ enabling it.
 
 ```bash
 docker network create media-net        # once, if the media stack has not created it
-cp .env.template .env                  # fill in values
+install -m 600 .env.template .env      # fill in values
 docker compose up -d --build
 curl -f http://localhost:8100/api/health
 ```

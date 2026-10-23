@@ -47,7 +47,7 @@ uvicorn app.main:app --reload --port 8100
 
 ```bash
 # Copy template and fill in your values
-cp .env.template .env
+install -m 600 .env.template .env
 
 # Build and run
 docker compose up -d --build
