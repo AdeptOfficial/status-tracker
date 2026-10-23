@@ -1,3 +1,12 @@
+## 2026-10-23: DEV writers aligned with production; episode list layout bug filed
+
+Gotham imports were blocked: Sonarr ran as 911 (live DEV Compose had lost PUID/PGID) and could not
+create its folder in a 755 `tv/shows`. DEV now runs qBittorrent, Prowlarr, Jackett, Sonarr and Radarr
+as 1000 like production, with 775 show roots; imports resumed on their own (infrastructure record in
+the homeserver repo). `docs/MEDIA-PERMISSIONS.md` notes the 911 identity was unintended. Filed
+[episode list status text wraps and clips](bugs/2026-10-23-episode-list-status-text-wraps-and-clips.md)
+from the owner's screenshot (no solution yet). Next: follow Gotham to Available.
+
 ## 2026-10-23: Per-episode feature rewritten with the agreed goal
 
 `features/2026-01-18-status-dashboard-multi-episode-tracking.md` renamed to

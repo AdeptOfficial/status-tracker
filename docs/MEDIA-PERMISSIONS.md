@@ -143,6 +143,15 @@ bypass the guard to test a movie workflow on a show.
 
 ## Tested evidence and release plan
 
+**Update 2026-10-23:** the DEV identity of UID911 described below was **not intended**. The live DEV
+Compose had lost `PUID`/`PGID`, so the LinuxServer writers ran as the image default 911, while the
+production deployment runs them as the media owner (UID/GID 1000) with 775 library roots. The first
+regular TV show on DEV then failed to import (Sonarr could not create its folder in a 755 `tv/shows`).
+DEV now matches production: `PUID=1000`/`PGID=1000` for qBittorrent, Prowlarr, Jackett, Sonarr and
+Radarr, the files they had created as 911 changed to 1000:1000, and the TV/anime show roots set to
+775. The disposable preflight failed as 911 before and passed as 1000 after. The evidence below is
+kept as the record of that period.
+
 On DEV with Radarr6.4.4.10685 on October20, Interstellar's original deletion exposed the permission bug:
 Radarr ran as UID911/GID911 with supplementary group1000; the movie directory and
 its parent were owned1000:1000 with mode0755. Its movie record disappeared even
