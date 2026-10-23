@@ -1,3 +1,11 @@
+## 2026-10-23: Feature filed: Lidarr (music) support
+
+Owner asked for future Lidarr support after Lidarr was set up on DEV. Filed
+[features/2026-10-23-lidarr-music-support.md](features/2026-10-23-lidarr-music-support.md): album as
+the request, tracks as items on the per-episode model, requests created from Lidarr events (no
+Jellyseerr for music), availability from Navidrome or Jellyfin music. Planned, after the per-episode
+fixes. Next: unchanged.
+
 ## 2026-10-23: DEV writers aligned with production; episode list layout bug filed
 
 Gotham imports were blocked: Sonarr ran as 911 (live DEV Compose had lost PUID/PGID) and could not
