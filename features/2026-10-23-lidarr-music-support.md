@@ -1,7 +1,7 @@
 # Lidarr (music) support
 
 **Created:** 2026-10-23
-**Status:** Planned (future; requested by the owner 2026-10-23, after Lidarr was set up on DEV; design notes added the same day, not implemented)
+**Status:** Planned (future; requested by the owner 2026-10-23, after Lidarr was set up on DEV; design notes added the same day, updated 2026-10-24 for Soulseek inside Lidarr; not implemented)
 **Priority:** Low
 **From:** Lidarr DEV setup; the earlier note "Future: Lidarr Support" in the homelab's media monitoring
 service doc (new client and plugin, webhook from Lidarr)
@@ -97,6 +97,32 @@ per-track progress works the same way as per-episode progress.
 10 hard releases (Japanese, niche, new) monitored at once: 5 imported within 5-7 minutes; the rest
 were held by a refusing sharer, a remote queue, a broken file or no match. Soularr settings were then
 changed (stall limit 15 min, skip failed users for a week) and re-tested.
+
+### Update 2026-10-24: Soulseek moved inside Lidarr (changes the design above)
+
+The homelab's music setup changed after these notes were written; the design must follow it:
+
+- **Soularr is retired.** Lidarr searches and grabs Soulseek itself through the **Tubifarry** plugin
+  (indexer `SlskdIndexer`, download client `SlskdClient` on Lidarr's plugin-capable develop line).
+  Soulseek grabs now appear in Lidarr like any other grab: queue items with `protocol`, `indexer`
+  "Soulseek (slskd)", `sizeleft`, `trackedDownloadState`, and history events `grabbed`,
+  `trackFileImported`, `downloadImported`, `albumImportIncomplete`, `downloadFailed`.
+  So the **Lidarr queue and history are the main signal for both paths**; the slskd transfers API is
+  only needed for per-file detail (queued remotely, rejected by the sharer).
+- States to adjust: "Searching" comes from Lidarr's own `AlbumSearch` / `MissingAlbumSearch` commands;
+  "Importing" from `downloadImported`; Soularr-specific signals (batches, "Failed grab", log lines)
+  no longer exist. Lidarr fails over to another Soulseek copy itself when a sharer refuses.
+- **New state "Import failed, retrying":** an incomplete or mismatched copy stays in the queue as
+  `importFailed` / `importBlocked` ("Has missing tracks", "Album match is not close enough"). The
+  deployment blocklists such items after an hour and Lidarr searches again (Redownload Failed on).
+  Status Tracker should show this as retrying, not as an error, and count the attempts.
+- **Requests without a person:** import lists add albums automatically (e.g. a Last.fm "top albums,
+  last month" list that monitors one album and searches; a top-artists list that adds artists only).
+  The Lidarr `AlbumAdded`/grab events carry no requester; label these "from import list".
+- **Quality order:** CD-quality FLAC is preferred over 24-bit (custom format score); vinyl rips are
+  blocked. A shown release title may therefore change on upgrade.
+- The Soulseek client now has an open listen port (own VPN connection), which raised search results
+  noticeably; no design change, only expectations.
 
 ## Acceptance
 
