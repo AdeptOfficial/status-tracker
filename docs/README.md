@@ -29,7 +29,7 @@ See [Testing](TESTING.md) for the regression suite, browser tests and dev review
 ## Tracker
 
 One file per item at the repo root: `bugs/` (malfunctions), `issues/` (gaps and
-investigations), `features/` (accepted capabilities), `ideas/`, `roadmap/`; each
+investigations), `features/` (ideas and accepted capabilities), `roadmap/`; each
 folder's README is a generated index.
 
 ## Archive

@@ -31,7 +31,7 @@ restarting: fresh movie24 completed with a verified result.
 - Durable refresh jobs use confirmed Shoko evidence, bounded retries/backoff and
   cache-task completion before scanning. No automatic VFS/media deletion.
   The metadata-task-only hypothesis failed; do not reinstate that dispatch.
-- See `bugs/resolved/2026-01-22-anime-matching-no-scan.md` and newest diary for
+- See `bugs/archive/2026-01-22-anime-matching-no-scan.md` and newest diary for
   evidence. Watcher completed; no observer is required for the finished S1 test.
 - TV synchronized deletion is temporarily blocked to prevent whole-show deletion
   from season controls. Failures retain records. Scoped deletion/re-request remains

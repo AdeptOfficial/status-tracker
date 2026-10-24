@@ -85,4 +85,4 @@ During library sync, for each item:
 ## Triage 2026-10-20
 
 **Verdict:** Superseded. **Status:** Resolved (triage, repo evidence; no live check in this pass).
-Covered by `bugs/resolved/2026-01-22-library-sync-should-populate-missing-ids.md` (Resolution 2026-10-20) and the Oct 20 "library-sync ID repair" diary line.
+Covered by `bugs/archive/2026-01-22-library-sync-should-populate-missing-ids.md` (Resolution 2026-10-20) and the Oct 20 "library-sync ID repair" diary line.

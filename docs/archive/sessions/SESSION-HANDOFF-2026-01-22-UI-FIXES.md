@@ -83,7 +83,7 @@ Requested "BOCCHI THE ROCK!" (12 episodes) to test flow:
 
 | Bug | Issue File | Status |
 |-----|------------|--------|
-| IMPORTING state skipped for anime | `docs/issues/resolved/2026-01-22-importing-state-skipped-for-anime.md` | Open |
+| IMPORTING state skipped for anime | `docs/issues/archive/2026-01-22-importing-state-skipped-for-anime.md` | Open |
 | SSE connections dropping rapidly | Needs issue file | Open |
 | UI not showing real-time progress | Related to SSE bug | Open |
 

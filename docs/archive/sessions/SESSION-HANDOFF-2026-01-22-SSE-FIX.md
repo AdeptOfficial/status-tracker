@@ -50,7 +50,7 @@ if anime_matching_requests or importing_requests:
 
 **Problem:** Anime goes `DOWNLOADED → ANIME_MATCHING`, skipping `IMPORTING` state.
 
-**Issue created:** `docs/issues/resolved/2026-01-22-importing-state-skipped-for-anime.md`
+**Issue created:** `docs/issues/archive/2026-01-22-importing-state-skipped-for-anime.md`
 
 **Added to roadmap:** Priority 1 in DIARY.md
 
@@ -68,7 +68,7 @@ modified:   app/routers/sse.py
 modified:   app/services/jellyfin_verifier.py
 modified:   app/templates/detail.html
 modified:   app/templates/index.html
-new file:   docs/issues/resolved/2026-01-22-importing-state-skipped-for-anime.md
+new file:   docs/issues/archive/2026-01-22-importing-state-skipped-for-anime.md
 renamed:    docs/issues/2026-01-22-sse-not-pushing-updates.md -> resolved/
 ```
 
