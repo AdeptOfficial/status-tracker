@@ -104,4 +104,4 @@ Status-tracker fallback checker found the movie and transitioned to `available`.
 
 - Shokofin config: `/config/plugins/configurations/Shokofin.xml` (in Jellyfin container)
 - Reference doc: `/docs/reference/SHOKOFIN-VFS-REBUILD.md`
-- Previous fix: `/issues/resolved/2026-01-22-shokofin-vfs-not-regenerating.md`
+- Previous fix: `/issues/archive/2026-01-22-shokofin-vfs-not-regenerating.md`

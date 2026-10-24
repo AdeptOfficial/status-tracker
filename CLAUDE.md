@@ -11,7 +11,7 @@ Request → Indexed → Downloading → Importing → [Anime Matching] → Avail
 
 ## Inbox Processing (Check on Every Startup)
 
-**IMPORTANT:** Read `inbox.txt` on startup and run `~/git/workflows/process-inbox.md`: one new `YYYY-MM-DD-slug.md` per line in `ideas/`, `bugs/`, `issues/` or `features/`, regenerate the index, then remove only the processed lines (infrastructure items go to `~/git/homeserver/issues/`).
+**IMPORTANT:** Read `inbox.txt` on startup and run `~/git/workflows/process-inbox.md`: one new `YYYY-MM-DD-slug.md` per line in `bugs/`, `issues/` or `features/`, regenerate the index, then remove only the processed lines (infrastructure items go to `~/git/homeserver/issues/`).
 
 ## Project Structure
 
@@ -34,8 +34,8 @@ status-tracker/
 ├── .env.template            # Environment variables template
 ├── Dockerfile
 ├── docs/                    # Technical documentation
-├── ideas/ bugs/ issues/     # Tracker, one file per item; rules in ~/git/homeserver-apps/AGENTS.md
-├── features/ roadmap/       # (roadmap is public-safe)
+├── bugs/ issues/ features/ # Tracker, one file per item; rules in ~/git/homeserver-apps/AGENTS.md
+├── roadmap/                 # public-safe milestones
 ```
 
 ## Development

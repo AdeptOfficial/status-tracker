@@ -57,7 +57,7 @@ Anime movie "Cosmic Princess Kaguya!" was stuck at `anime_matching` state. After
 
 ## Documentation Created
 
-- `/issues/resolved/2026-01-25-shokofin-filtermovielibraries-excluding-anime.md`
+- `/issues/archive/2026-01-25-shokofin-filtermovielibraries-excluding-anime.md`
 - `/issues/2026-01-25-qbittorrent-progress-threshold.md`
 - Updated `/docs/reference/SHOKOFIN-VFS-REBUILD.md`
 

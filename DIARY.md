@@ -1,3 +1,10 @@
+## 2026-10-24: Tracker archive layout and standard inbox
+
+`ideas/` folded into `features/` (ideas are Status: Idea); `features/implemented`, `bugs/resolved`,
+`issues/resolved` and `ideas/declined` moved to each folder's `archive/`; links and indexes
+updated. `inbox.txt` now has `bugs:`, `issues:`, `features:` sections. Rules: `~/git/homeserver-apps/AGENTS.md`.
+Next: per-episode fixes first; music support stays Planned.
+
 ## 2026-10-24: Music design updated for Soulseek inside Lidarr
 
 [features/2026-10-23-lidarr-music-support.md](features/2026-10-23-lidarr-music-support.md) got an

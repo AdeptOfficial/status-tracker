@@ -37,8 +37,8 @@ resuming; it includes images, rollback, evidence and uncommitted-source warnings
 Current DEV image: `status-tracker:split-files-20261020`.240 regressions and full
 Firefox acceptance pass; real season pages show10/10 Ready and the correct sequel
 Watch link. Runtime/source hashes verified. See [testing](TESTING.md), the
-[recovery resolution](../bugs/resolved/2026-01-22-anime-matching-no-scan.md),
-[season resolution](../bugs/resolved/2026-10-20-separate-season-requests.md),
+[recovery resolution](../bugs/archive/2026-01-22-anime-matching-no-scan.md),
+[season resolution](../bugs/archive/2026-10-20-separate-season-requests.md),
 and `~/git/homeserver/configs/dev/services/status-tracker/README.md` for deployment
 and rollback details. Older diary results describe earlier builds.
 
