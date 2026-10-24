@@ -1,3 +1,12 @@
+## 2026-10-24: Music design updated for Soulseek inside Lidarr
+
+[features/2026-10-23-lidarr-music-support.md](features/2026-10-23-lidarr-music-support.md) got an
+update section: the homelab retired Soularr, so Soulseek grabs now show in Lidarr's queue and history
+like torrents (main signal for both paths); new "import failed, retrying" state (stuck imports are
+blocklisted hourly); import-list requests have no requester. Design only, nothing built.
+
+Next: per-episode fixes first; music support stays Planned.
+
 ## 2026-10-23: Bug reopened: deletion leaves torrents in qBittorrent
 
 [bugs/2026-01-21-deletion-remove-qbittorrent-torrent.md](bugs/2026-01-21-deletion-remove-qbittorrent-torrent.md)
